@@ -1,0 +1,21 @@
+
+<launch>
+    <param name="use_sim_time" value="true"/>
+
+    <!--启动配置好的rviz-->
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find lwio)/rviz/lwio.rviz" />
+
+    <!-- Parameters -->
+    <!-- <rosparam file="$(find liv_slam)/config/liv_params.yaml" command="load" /> -->
+    <!-- "/rslidar_points" /points_raw   /left/velodyne_points -->
+    <param name="ParamPath" value="$(find lwio)/config/livox_icp.yaml" />
+    <param name="LidarTopic" value="/livox/lidar" />
+    <param name="LidarType" value="0" />   <!--0: livox, 1:velodyne--> 
+    <param name="ScanMatch" value="ICP" />  
+    <param name="LidarLineNum" value="6" />
+    <param name="MaxRangeThresh" value="150" />
+    <param name="MinRangeThresh" value="1" />
+    
+    <node name="faster_loam_node" pkg="lwio" type="faster_loam_node" output="screen">
+    </node>
+</launch>

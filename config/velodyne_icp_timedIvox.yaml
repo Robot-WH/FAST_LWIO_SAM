@@ -1,0 +1,81 @@
+
+# 算法的配置文件 
+preprocess:
+  downsampling_enable: true   # 是否使用降采样
+  outlierRemoval_enable: false
+  first_ignore_enable: true   # 对于起始帧是否不进行处理
+  downsampling:
+    mode: VoxelGrid    # VoxelGrid ， ApproximateVoxelGrid 
+    VoxelGrid:
+      resolution: 0.5
+    ApproximateVoxelGrid:
+  outlierRemoval: 
+    mode: radiusOutlier # radiusOutlier, statisticalOutlier
+    radiusOutlier:
+      radius:
+      min_neighbors:
+    statisticalOutlier:
+      mean_k:
+      k: 
+      
+process:
+  feature_extract_enable: false
+
+tracker:
+  # point_plane_icp
+  # ndt
+  # gicp 
+  # edge_plane_feature_icp
+  registration:
+    method: point_plane_icp  
+    point_plane_icp:
+      solve: ceres   # ceres, LM, GN  
+      point_label: filtered 
+    ndt:
+    gicp:
+    edge_plane_feature_icp:
+      solve: ceres
+      edge_label:
+      plane_label:
+  keyframe_update:
+    translation: 0.3
+    rotation: 0.1
+    time: 10
+  localmap:
+    method: timedIvox  # time_sliding, area_sliding, ivox, ikdtree, timedIvox
+    time_sliding:
+      window_size: 50
+      kdtree_enable: true   # 是否启用kdtree搜索
+    area_sliding:
+    timedIvox:
+      window_size: 10
+      resolution: 0.5
+      nearby_type: 18   # 1, 6, 18, 26 
+      capacity: 30000    # voxel的容量 
+
+
+mapping:
+  acc_cov: 0.1
+  gyr_cov: 0.1
+  b_acc_cov: 0.0001
+  b_gyr_cov: 0.0001
+  fov_degree: 90
+  det_range: 450.0
+  extrinsic_est_en: false      # true: enable the online estimation of IMU-LiDAR extrinsic
+  extrinsic_T: [ 0.04165, 0.02326, -0.0284 ]
+  extrinsic_R: [ 1, 0, 0,
+                 0, 1, 0,
+                 0, 0, 1 ]
+
+
+
+feature_extract_enable: false
+point_filter_num: 3
+max_iteration: 3
+filter_size_surf: 0.5
+filter_size_map: 0.5             # 暂时未用到，代码中为0， 即倾向于将降采样后的scan中的所有点加入map
+cube_side_length: 1000
+
+ivox_grid_resolution: 0.5        # default=0.2
+ivox_nearby_type: 18             # 6, 18, 26
+esti_plane_threshold: 0.1        # default=0.1

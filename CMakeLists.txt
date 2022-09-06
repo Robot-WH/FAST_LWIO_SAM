@@ -1,15 +1,12 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(liv_slam)
-# CMAKE_MODULE_PATH是以分号分隔的列表，供include()或 find_package()使用
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_LIST_DIR}/cmake")
+project(lwio)
 
-# set(CMAKE_CXX_STANDARD 14)
-# set(CMAKE_CXX_FLAGS_RELEASE "-Wall -g")
-# set(CMAKE_BUILD_TYPE Release)   # Debug
-
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED OFF)
+set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_BUILD_TYPE "Release")
-set(CMAKE_CXX_FLAGS "-std=c++11")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g")
+# set(CMAKE_BUILD_TYPE Debug)
+# add_definitions("-Wall -g") 
 
 find_package(catkin REQUIRED COMPONENTS
   tf
@@ -35,6 +32,7 @@ find_package(OpenCV 3.0 QUIET)
 find_package(GTSAM REQUIRED QUIET)
 find_package(glog  REQUIRED)
 find_package(Boost REQUIRED COMPONENTS timer)
+find_package(yaml-cpp REQUIRED)
 
 find_package(OpenMP)
 if (OPENMP_FOUND)
@@ -86,18 +84,10 @@ include_directories(
   # ${G2O_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
   ${GTSAM_INCLUDE_DIR}
-)
-
-# link directories
-link_directories(
-	${PCL_LIBRARY_DIRS}
-  ${OpenCV_LIBRARY_DIRS}
-  ${GTSAM_LIBRARY_DIRS}
+  ${yaml-cpp_INCLUDE_DIRS}
 )
 
 include(cmake/Macros.cmake)
-include(cmake/geographic.cmake)
-
 add_subdirectory(src)
 
 

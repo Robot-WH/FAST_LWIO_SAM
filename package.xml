@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package>
-  <name>liv_slam</name>
+  <name>lwio</name>
   <version>0.0.0</version>
-  <description>The liv_slam package</description>
+  <description>The lwio package</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag -->
   <!-- Example:  -->
@@ -46,5 +46,9 @@
   <run_depend>message_generation</run_depend>
   <build_depend>message_runtime</build_depend>
   <run_depend>message_runtime</run_depend>
+
+  <build_depend>livox_ros_driver</build_depend>
+  <run_depend>livox_ros_driver</run_depend>
+  
 
 </package>

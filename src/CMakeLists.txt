@@ -1,4 +1,4 @@
-add_subdirectory(MultiSensorFusionEstimator3D)
+add_subdirectory(lwio)
 add_subdirectory(apps)
 
 

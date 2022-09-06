@@ -1,19 +1,22 @@
 cmake_minimum_required(VERSION 3.0.2)
 project(app)
 
-# set(CMAKE_BUILD_TYPE "Release" )
-# set(CMAKE_CXX_STANDARD 14)
-# set(CMAKE_CXX_FLAGS_RELEASE "-Wall -g")
+# set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_BUILD_TYPE "Release")
-set(CMAKE_CXX_FLAGS "-std=c++11")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g")
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -fexceptions -g -ggdb")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 ${CMAKE_CXX_FLAGS}")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS}")
 
 include_directories(
   include
   ${SLAM_INCLUDE_DIR}
   )
 
-link_libraries(${SLAM_LIBRARIES})
+# message(FATAL_ERROR ${SLAM_INCLUDE_DIR})
 
 find_package(OpenMP REQUIRED)
 if (OPENMP_FOUND)
@@ -22,34 +25,41 @@ if (OPENMP_FOUND)
     set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 endif()
 
-add_executable(ins_node src/localization/ins_node.cpp)
-target_link_libraries(ins_node ${catkin_LIBRARIES} ${ALL_TARGET_LIBRARIES})
+add_executable(faster_loam_node
+  src/faster_loam_node.cpp
+)
 
-# add_executable(filter_lio_node src/LIO/FilterLIO/simple_lio_node.cpp)
-# target_link_libraries(filter_lio_node ${catkin_LIBRARIES} ${ALL_TARGET_LIBRARIES})
+add_dependencies(faster_loam_node
+  ${catkin_EXPORTED_TARGETS}
+)
 
-# add_executable(lidar_preprocessing_node src/DataPreProcessing/lidar_preprocessing.cpp)
-# target_link_libraries(lidar_preprocessing_node ${catkin_LIBRARIES} ${ALL_TARGET_LIBRARIES})
+target_link_libraries(faster_loam_node
+  ${catkin_LIBRARIES}
+  ${SLAM_LIBRARIES}
+  /usr/local/lib/libtbb.so
+  /usr/local/lib/libtbbmalloc.so
+  /usr/local/lib/libtbbmalloc_proxy.so
+)
 
-# add_executable(lidar_lidar_odometry_node src/MultiLidarOdometry/lidar_lidar_odometry.cpp)
-# target_link_libraries(lidar_lidar_odometry_node 
+# add_executable(LWIO_SAM_node
+#   src/LWIO_SAM_node.cpp
+# )
+
+# add_dependencies(LWIO_SAM_node
+#   ${catkin_EXPORTED_TARGETS}
+# )
+
+# target_link_libraries(LWIO_SAM_node
+#   ${catkin_LIBRARIES}
+#   ${Boost_LIBRARIES}
+#   ${PCL_LIBRARY_DIRS}
+#   ${SLAM_LIBRARIES}
+# )
+
+# add_executable(lio_node src/LIO/FilterLIO/simple_lio_node.cpp)
+# target_link_libraries(lio_node 
 #                                             ${catkin_LIBRARIES} 
 #                                             ${ALL_TARGET_LIBRARIES}
-#                                             # ${G2O_LIBRARIES}
 #                                             ${SLAM_LIBRARIES}
-#                                             )
-
-add_executable(MultiLidarSLAM_node src/MultiLidarSLAM_node.cpp)
-target_link_libraries(MultiLidarSLAM_node 
-                                            ${catkin_LIBRARIES} 
-                                            ${ALL_TARGET_LIBRARIES}
-                                            ${SLAM_LIBRARIES}
-)
-
-add_executable(LidarImuGnssFusion_node src/LidarImuGnssFusion_node.cpp)
-target_link_libraries(LidarImuGnssFusion_node 
-                                            ${catkin_LIBRARIES} 
-                                            ${ALL_TARGET_LIBRARIES}
-                                            ${SLAM_LIBRARIES}
-)
+# )
                                             

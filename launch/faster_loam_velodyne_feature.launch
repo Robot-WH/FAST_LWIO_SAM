@@ -1,0 +1,15 @@
+
+<launch>
+    <param name="use_sim_time" value="true"/>
+
+    <!--启动配置好的rviz-->
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find LWIO)/rviz/lwio.rviz" />
+
+    <!-- Parameters -->
+    <!-- <rosparam file="$(find liv_slam)/config/liv_params.yaml" command="load" /> -->
+    <!-- "/rslidar_points" /points_raw   /left/velodyne_points -->
+    <param name="LidarTopic" value="/rslidar_points" />
+    
+    <node name="faster_loam_node" pkg="LWIO" type="faster_loam_node" output="screen">
+    </node>
+</launch>

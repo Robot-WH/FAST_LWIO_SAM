@@ -1,0 +1,19 @@
+
+<launch>
+    <param name="use_sim_time" value="true"/>
+
+    <!--启动配置好的rviz-->
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find lwio)/rviz/lwio.rviz" />
+
+    <!-- Parameters -->
+    <param name="ParamPath" value="$(find lwio)/config/velodyne_icp_timedIvox.yaml" />
+    <!-- "/rslidar_points" /points_raw   /left/velodyne_points -->
+    <param name="LidarTopic" value="/rslidar_points" />
+    <param name="LidarType" value="1" />   <!--0: livox, 1:velodyne--> 
+    <param name="LidarLineNum" value="16" />
+    <param name="MaxRangeThresh" value="100" />
+    <param name="MinRangeThresh" value="1" />
+
+    <node name="faster_loam_node" pkg="lwio" type="faster_loam_node" output="screen">
+    </node>
+</launch>
