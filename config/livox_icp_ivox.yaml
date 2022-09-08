@@ -29,8 +29,10 @@ tracker:
   registration:
     method: point_plane_icp  
     point_plane_icp:
-      solve: ceres   # ceres, LM, GN  
+      solve: GN   # ceres, LM, GN  
       point_label: filtered 
+      max_iterater_count: 10
+      norm_iterater_count: 3
     ndt:
     gicp:
     edge_plane_feature_icp:
@@ -51,7 +53,7 @@ tracker:
       downsampling_size: 0.25
       resolution: 0.5      # 注意： downsampling_size 整数倍，即 resolution / downsampling_size = 1, 2, 3, 4,......
       nearby_type: 18   # 1, 6, 18, 26 
-      capacity: 10000    # voxel的容量 
+      capacity: 100000    # voxel的容量 
 
 
 
