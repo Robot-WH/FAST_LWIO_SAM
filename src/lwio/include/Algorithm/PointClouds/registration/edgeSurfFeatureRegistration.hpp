@@ -134,7 +134,7 @@ class EdgeSurfFeatureRegistration : public RegistrationBase<_PointType> {
             }
             // 迭代
             for (iterCount = 0; iterCount < optimization_count_; iterCount++) {
-                // LOG(INFO) << "--------------------------iterCount : "<< iterCount;  
+                LOG(INFO) << "--------------------------iterCount : "<< iterCount;  
                 if (iterCount == optimization_count_ - 1) {
                     save_match_info = true;   // 最后一次迭代需要保存匹配的信息 
                 }
@@ -461,7 +461,9 @@ class EdgeSurfFeatureRegistration : public RegistrationBase<_PointType> {
                     Eigen::Vector3d old_t_w_l = t_w_l_;
                     Eigen::Quaterniond old_q_w_l = q_w_l_;
                     updateState(delta_x);// 更新当前位姿 x = x + delta_x
+                    TicToc tt;
                     double currChi = updateResidual();     // 求解当前状态更新后的残差 
+                    tt.toc("updateResidual ");
                     // 计算线性近似的下降值   L(0) - L(delta_x)
                     double linear_approximation = 0;
                     linear_approximation = delta_x.transpose() * (current_lambda * delta_x - JTR);
