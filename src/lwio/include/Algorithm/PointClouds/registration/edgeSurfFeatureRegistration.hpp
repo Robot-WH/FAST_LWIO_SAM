@@ -20,7 +20,7 @@ namespace Algorithm {
 template<typename _PointType>
 class EdgeSurfFeatureRegistration : public RegistrationBase<_PointType> {
     private:
-        #define handle_degenerate 1
+        #define handle_degenerate 0
         using SurfCostFactorInfo = typename SurfFeatureMatch<_PointType>::SurfCostFactorInfo;
         using EdgeCostFactorInfo = typename EdgeFeatureMatch<_PointType>::EdgeCostFactorInfo;
         using Base = RegistrationBase<_PointType>; 
@@ -134,7 +134,7 @@ class EdgeSurfFeatureRegistration : public RegistrationBase<_PointType> {
             }
             // 迭代
             for (iterCount = 0; iterCount < optimization_count_; iterCount++) {
-                LOG(INFO) << "--------------------------iterCount : "<< iterCount;  
+                // LOG(INFO) << "--------------------------iterCount : "<< iterCount;  
                 if (iterCount == optimization_count_ - 1) {
                     save_match_info = true;   // 最后一次迭代需要保存匹配的信息 
                 }
