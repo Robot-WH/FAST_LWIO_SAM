@@ -61,17 +61,20 @@ class LidarTracker : public LidarTrackerBase<_PointType> {
                 LOG(INFO) << "point_label:"<<point_label; 
                 if (solve == "ceres") {
                     registration_ptr_.reset(new CeresEdgeSurfFeatureRegistration<_PointType>("", point_label)); 
-                } else if (solve == "LM") {
-                    // 使用手写LM法
-                    // registration_ptr_.reset(new EdgeSurfFeatureRegistration<_PointType>("", point_label)); 
-                } else if (solve == "GN") {
+                } else if (solve == "LM" || solve == "GN") {
                     typename EdgeSurfFeatureRegistration<_PointType>::Option option;
                     option.surf_label_ = point_label;
                     option.max_iterater_count_ = 
                         yaml["tracker"]["registration"]["point_plane_icp"]["max_iterater_count"].as<int>();
                     option.norm_iterater_count_ = 
                         yaml["tracker"]["registration"]["point_plane_icp"]["norm_iterater_count"].as<int>();
-                    option.method_ = EdgeSurfFeatureRegistration<_PointType>::OptimizeMethod::GN;
+                    if (solve == "GN") {
+                        option.method_ = EdgeSurfFeatureRegistration<_PointType>::OptimizeMethod::GN;
+                    } else {
+                        option.method_ = EdgeSurfFeatureRegistration<_PointType>::OptimizeMethod::LM;
+                        option.lm_option_.max_iterater_count_ = 
+                            yaml["tracker"]["registration"]["point_plane_icp"]["LM"]["max_iterater_count"].as<int>();
+                    }
                     registration_ptr_.reset(new EdgeSurfFeatureRegistration<_PointType>(option)); 
                 }
             } else if (registration_method == "ndt") {

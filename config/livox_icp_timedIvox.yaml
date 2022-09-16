@@ -29,8 +29,12 @@ tracker:
   registration:
     method: point_plane_icp  
     point_plane_icp:
-      solve: ceres   # ceres, LM, GN  
+      solve: LM   # ceres, LM, GN  
       point_label: filtered 
+      max_iterater_count: 10
+      norm_iterater_count: 3
+      LM:
+        max_iterater_count: 5
     ndt:
     gicp:
     edge_plane_feature_icp:

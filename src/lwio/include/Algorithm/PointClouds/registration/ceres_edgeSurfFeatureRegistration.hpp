@@ -122,6 +122,7 @@ class CeresEdgeSurfFeatureRegistration : public RegistrationBase<_PointType> {
                 tt.toc("addCostFactor ");
                 ceres::Solver::Options options;
                 options.linear_solver_type = ceres::DENSE_QR;
+                options.trust_region_strategy_type = ceres::LEVENBERG_MARQUARDT; 
                 options.max_num_iterations = 4;
                 options.minimizer_progress_to_stdout = false;
                 options.check_gradients = false;

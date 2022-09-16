@@ -51,20 +51,23 @@ class SurfFeatureMatch : public FeatureMatch<_PointT> {
                     break;
                 }
             }
-            // 质量好  则匹配成功 
+            // 质量好  则匹配成功   计算出匹配的残差  
             if (planeValid) {
                 Eigen::Vector3d curr_point(point.x, point.y, point.z);
                 float distance = norm.dot(curr_point) + D;
-                    // 残差  
-                res.residuals_ = std::fabs(distance);
+                // 残差  
+                // res.residuals_ = std::fabs(distance);
                 
-                if (distance >= 0) {
-                    res.norm_ = norm;
-                    res.D_ = D;  
-                } else {
-                    res.norm_ = -norm;
-                    res.D_ = -D;  
-                }
+                // if (distance >= 0) {
+                //     res.norm_ = norm;
+                //     res.D_ = D;  
+                // } else {
+                //     res.norm_ = -norm;
+                //     res.D_ = -D;  
+                // }
+                res.residuals_ = distance;
+                res.norm_ = norm;
+                res.D_ = D;  
                 res.is_valid_ = true;  
                 return true;
             }
