@@ -70,6 +70,8 @@ class LidarTracker : public LidarTrackerBase<_PointType> {
                         yaml["tracker"]["registration"]["point_plane_icp"]["norm_iterater_count"].as<int>();
                     if (solve == "GN") {
                         option.method_ = EdgeSurfFeatureRegistration<_PointType>::OptimizeMethod::GN;
+                        option.gn_option_.max_iterater_count_ = 
+                            yaml["tracker"]["registration"]["point_plane_icp"]["GN"]["max_iterater_count"].as<int>();
                     } else {
                         option.method_ = EdgeSurfFeatureRegistration<_PointType>::OptimizeMethod::LM;
                         option.lm_option_.max_iterater_count_ = 

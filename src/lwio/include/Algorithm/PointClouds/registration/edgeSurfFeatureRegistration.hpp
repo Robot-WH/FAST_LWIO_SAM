@@ -20,7 +20,7 @@ namespace Algorithm {
 template<typename _PointType>
 class EdgeSurfFeatureRegistration : public RegistrationBase<_PointType> {
     private:
-        #define handle_degenerate 0
+        #define handle_degenerate 1
         using SurfCostFactorInfo = typename SurfFeatureMatch<_PointType>::SurfCostFactorInfo;
         using EdgeCostFactorInfo = typename EdgeFeatureMatch<_PointType>::EdgeCostFactorInfo;
         using Base = RegistrationBase<_PointType>; 
@@ -30,6 +30,9 @@ class EdgeSurfFeatureRegistration : public RegistrationBase<_PointType> {
         struct OptionLM {
             uint16_t max_iterater_count_ = 30;   // 最大迭代优化次数   
         };
+        struct OptionGN {
+            uint16_t max_iterater_count_ = 30;   // 最大迭代优化次数   
+        };
         struct Option {
             std::string edge_label_;
             std::string surf_label_;
@@ -37,6 +40,7 @@ class EdgeSurfFeatureRegistration : public RegistrationBase<_PointType> {
             uint16_t max_iterater_count_ = 10;    // 初始优化迭代次数   每一次迭代需要重新找一次最近邻  
             uint16_t norm_iterater_count_ = 3;  // 常规优化次数
             OptionLM lm_option_;    // LM优化算法的设置 
+            OptionGN gn_option_;  
         };  
 
         //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -134,20 +138,29 @@ class EdgeSurfFeatureRegistration : public RegistrationBase<_PointType> {
             }
             // 迭代
             for (iterCount = 0; iterCount < optimization_count_; iterCount++) {
-                LOG(INFO) << "--------------------------iterCount : "<< iterCount;  
+                // LOG(INFO) << "--------------------------iterCount : "<< iterCount;  
                 if (iterCount == optimization_count_ - 1) {
                     save_match_info = true;   // 最后一次迭代需要保存匹配的信息 
                 }
+                // TicToc tt;
                 // 为每个特征构建残差factor  
                 addSurfCostFactor(save_match_info);
                 addEdgeCostFactor(save_match_info);  
+                // tt.toc("add const factor");
                 // scan-to-map优化
                 // 对匹配特征点计算Jacobian矩阵，观测值为特征点到直线、平面的距离，
                 // 构建高斯牛顿方程，迭代优化当前位姿，存transformTobeMapped
                 if (option_.method_ == OptimizeMethod::GN) {
-                    if (gnOptimization(iterCount) == true) {
-                        break;              
+                    if (gnOptimization(option_.gn_option_)) {
+                        if (nearly_convergence) {
+                            break;
+                        } else {
+                            nearly_convergence = true;  
+                        }
+                    } else {
+                        nearly_convergence = false;  
                     }
+                    //gnOptimization(option_.gn_option_); 
                 } else if (option_.method_ == OptimizeMethod::LM) {
                     if (lmOptimization(option_.lm_option_)) {
                         if (nearly_convergence) {
@@ -158,6 +171,7 @@ class EdgeSurfFeatureRegistration : public RegistrationBase<_PointType> {
                     } else {
                         nearly_convergence = false;  
                     }
+                    // lmOptimization(option_.lm_option_); 
                 }
             }
             T.linear() = q_w_l_.toRotationMatrix();
@@ -189,17 +203,17 @@ class EdgeSurfFeatureRegistration : public RegistrationBase<_PointType> {
                 points_registration_res_[option_.surf_label_].nearly_points_.resize(surf_point_in_->points.size()); 
             }
             //std::cout<<"addSurfCostFactor, points.size(): "<<(int)surf_point_in_->points.size()<<std::endl;
-            std::vector<uint32_t> index(surf_point_in_->points.size());
-            for (uint32_t i = 0; i < index.size(); ++i) {
-                index[i] = i;
+            std::vector<uint32_t> temp_surf_index_(surf_point_in_->points.size());
+            for (uint32_t i = 0; i < surf_point_in_->points.size(); ++i) {
+                temp_surf_index_[i] = i;
             }
             surf_num_ = 0;  
-            origin_surf_points_.clear();
-            surf_matched_info_.clear();
-            surf_matched_info_.resize(surf_point_in_->points.size()); 
-            origin_surf_points_.resize(surf_point_in_->points.size());
+            std::vector<Eigen::Vector3d> temp_origin_surf_points_;
+            std::vector<SurfCostFactorInfo> temp_surf_matched_info_;
+            temp_origin_surf_points_.resize(surf_point_in_->points.size()); 
+            temp_surf_matched_info_.resize(surf_point_in_->points.size());
             //for (int i = 0; i < (int)surf_point_in_->points.size(); i++) {
-            std::for_each(std::execution::par_unseq, index.begin(), index.end(), 
+            std::for_each(std::execution::par_unseq, temp_surf_index_.begin(), temp_surf_index_.end(), 
                 [&](const size_t &i) {
                     _PointType point_temp;
                     pointLocalToMap(&(surf_point_in_->points[i]), &point_temp);
@@ -209,8 +223,8 @@ class EdgeSurfFeatureRegistration : public RegistrationBase<_PointType> {
                         Eigen::Vector3d ori_point(surf_point_in_->points[i].x, 
                                                         surf_point_in_->points[i].y, 
                                                         surf_point_in_->points[i].z);
-                        origin_surf_points_[i] = ori_point;  
-                        surf_matched_info_[i] = res;  
+                        temp_origin_surf_points_[i] = ori_point;  
+                        temp_surf_matched_info_[i] = std::move(res);  
                         surf_num_++; 
                     }
                     // 保存该点的匹配残差信息，匹配点信息  不论是否匹配成功  
@@ -222,6 +236,26 @@ class EdgeSurfFeatureRegistration : public RegistrationBase<_PointType> {
                     }
                 }
             ); 
+            // TicToc tt; 
+            surf_index_.resize(surf_num_);
+            for (uint32_t i = 0; i < surf_num_; ++i) {
+                surf_index_[i] = i;
+            }
+            origin_surf_points_.clear();
+            surf_matched_info_.clear();
+            surf_matched_info_.resize(surf_num_); 
+            origin_surf_points_.resize(surf_num_);
+            int index = 0; 
+            // 遍历匹配特征点，构建Jacobian矩阵
+            for (int i = 0; i < surf_point_in_->points.size(); i++) {
+                if (!temp_surf_matched_info_[i].is_valid_) {
+                    continue; 
+                }
+                origin_surf_points_[index] = temp_origin_surf_points_[i];
+                surf_matched_info_[index] = std::move(temp_surf_matched_info_[i]);   
+                index++;  
+            }
+            // tt.toc("rebuild ");
             //LOG(INFO) << "surf feature num:" << surf_num_; 
             if (surf_num_ < 20) {
                 printf("not enough surf points");
@@ -266,6 +300,7 @@ class EdgeSurfFeatureRegistration : public RegistrationBase<_PointType> {
                     points_registration_res_[option_.edge_label_].nearly_points_[i] = std::move(res.matched_points_); 
                 }
             }); 
+
             //LOG(INFO) << "edge feature num:" << edge_num_; 
             if(edge_num_ < 20) {
                 printf("not enough edge points");
@@ -278,50 +313,29 @@ class EdgeSurfFeatureRegistration : public RegistrationBase<_PointType> {
             Eigen::MatrixXd R(Eigen::MatrixXd::Zero(edge_num_ + surf_num_, 1));   
             JTR.setZero();
             JTJ.setZero();   
+            // 实测多线程加速后 比 单线程快 30% - 50%
+            std::for_each(std::execution::par_unseq, surf_index_.begin(), surf_index_.end(), 
+                [&](const size_t &i) {
+                    // 激光系下点的坐标 
+                    Eigen::Vector3d& pointOri = origin_surf_points_[i];
+                    // 残差以及其梯度向量  
+                    Eigen::Vector3d& grad = surf_matched_info_[i].norm_; 
+                    double& residual = surf_matched_info_[i].residuals_;
 
-            Eigen::Vector3d grad, pointOri;  
-            float residual = 0;  
-            int edge_point_num = edge_matched_info_.size(); 
-            int surf_point_num = surf_matched_info_.size(); 
-            int all_point_num = surf_point_num + edge_point_num; 
-            int valid_count = 0; 
-            // 遍历匹配特征点，构建Jacobian矩阵
-            for (int i = 0; i < all_point_num; i++) {
-                if (i < edge_point_num) {
-                    if (!edge_matched_info_[i].is_valid_) {
-                        continue; 
-                    }
-                    // 激光系下点的坐标 
-                    pointOri = origin_edge_points_[i];
-                    // 残差以及其梯度向量  
-                    grad = edge_matched_info_[i].norm_; 
-                    residual = edge_matched_info_[i].residuals_;
-                } else {
-                    int surf_ind = i - edge_point_num;
-                    if (!surf_matched_info_[surf_ind].is_valid_) {
-                        continue; 
-                    }
-                    // 激光系下点的坐标 
-                    pointOri = origin_surf_points_[surf_ind];
-                    // 残差以及其梯度向量  
-                    grad = surf_matched_info_[surf_ind].norm_; 
-                    residual = surf_matched_info_[surf_ind].residuals_;
+                    Eigen::Matrix<double, 3, 6> d_P_T;
+                    // 左乘扰动 
+                    //d_P_T.block<3, 3>(0, 0) = -Math::GetSkewMatrix<double>(q_w_l_ * pointOri);    // 关于旋转
+                    //  右乘扰动  
+                    d_P_T.block<3, 3>(0, 0) = (-q_w_l_.toRotationMatrix() 
+                                                                            * Math::GetSkewMatrix<double>(pointOri));
+                    d_P_T.block<3, 3>(0, 3) = Eigen::Matrix3d::Identity();     // 关于平移  
+                    Eigen::Matrix<double, 1, 3> d_r_P = grad.transpose();  
+                    J.block<1, 6>(i, 0) = d_r_P * d_P_T;  // lidar -> camera
+                    R(i, 0) = residual; // 点到直线距离、平面距离，作为观测值
                 }
-
-                Eigen::Matrix<double, 3, 6> d_P_T;
-                // 左乘扰动 
-                //d_P_T.block<3, 3>(0, 0) = -Math::GetSkewMatrix<double>(q_w_l_ * pointOri);    // 关于旋转
-                //  右乘扰动  
-                d_P_T.block<3, 3>(0, 0) = (-q_w_l_.toRotationMatrix() 
-                                                                        * Math::GetSkewMatrix<double>(pointOri));
-                d_P_T.block<3, 3>(0, 3) = Eigen::Matrix3d::Identity();     // 关于平移  
-                Eigen::Matrix<double, 1, 3> d_r_P = grad.transpose();  
-                J.block<1, 6>(valid_count, 0) = d_r_P * d_P_T;  // lidar -> camera
-                R(valid_count, 0) = residual; // 点到直线距离、平面距离，作为观测值
-                valid_count++; 
-            }
+            ); 
             JTJ = J.transpose() * J;
-            JTR = J.transpose() * R;
+            JTR = J.transpose() * R;            
         }
 
         //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -354,40 +368,47 @@ class EdgeSurfFeatureRegistration : public RegistrationBase<_PointType> {
          * @param {int} iterCount
          * @return {*}
          */    
-        bool gnOptimization(int iterCount) {
+        bool gnOptimization(OptionGN const& option) {
             // 当前帧匹配特征点数太少
             if (edge_num_ + surf_num_ < 10) {
                 std::cout<<common::YELLOW<<"not enough feature, num: "
                 <<edge_num_ + surf_num_<<common::RESET<< std::endl;
                 return false;
             }
-            // Eigen::MatrixXd X(Eigen::MatrixXd::Zero(6, 1));   
-            Eigen::Matrix<double, 6, 6> JTJ;
-            Eigen::Matrix<double, 6, 1> JTR;
-            makeHessian(JTJ, JTR);
-            Eigen::Matrix<double, 6, 1> delta_x = JTJ.colPivHouseholderQr().solve(-JTR);    // QR分解 解AX=B 
-            // tt.toc("QR solve ");
-            // // J^T·J·delta_x = -J^T·f 高斯牛顿
-            // X = JTJ.ldlt().solve(-JTR);    //  方式2：采用LDL
-            // tt.toc("LDLT solve ");
-            #if handle_degenerate
-                if (iterCount == 0) {
-                    checkDegenerate(JTJ); 
+            // 迭代n次 
+            for (int num = 0; num < option.max_iterater_count_; num++) {
+                // LOG(INFO) << "GN iter:" << num; 
+                // Eigen::MatrixXd X(Eigen::MatrixXd::Zero(6, 1));   
+                Eigen::Matrix<double, 6, 6> JTJ;
+                Eigen::Matrix<double, 6, 1> JTR;
+                makeHessian(JTJ, JTR);
+                Eigen::Matrix<double, 6, 1> delta_x = JTJ.colPivHouseholderQr().solve(-JTR);    // QR分解 解AX=B 
+                double deltaR = sqrt(pow(delta_x(0, 0), 2) +
+                                                            pow(delta_x(1, 0), 2) +
+                                                            pow(delta_x(2, 0), 2)); 
+                double deltaT = sqrt(pow(delta_x(3, 0) * 100, 2) 
+                                                        + pow(delta_x(4, 0) * 100, 2) 
+                                                        + pow(delta_x(5, 0) * 100, 2)); // unit:cm  
+                // delta_x很小，认为收敛   
+                if (deltaR < 0.0005 && deltaT < 0.03) {   // 角度变化 < 0.03度  位置变化 < 0.03 cm 
+                    // LOG(INFO) << "GN 收敛"; 
+                    return true; 
                 }
-                if (is_degenerate_) {
+                // tt.toc("QR solve ");
+                // // J^T·J·delta_x = -J^T·f 高斯牛顿
+                // X = JTJ.ldlt().solve(-JTR);    //  方式2：采用LDL
+                // tt.toc("LDLT solve ");
+                #if handle_degenerate
+                    if (!check_degenerate_) {
+                        checkDegenerate(JTJ); 
+                        check_degenerate_ = true;  
+                    }
+                    if (is_degenerate_) {
                         delta_x = Map_ * delta_x;
-                }
-            #endif
-            updateState(delta_x);
-            double deltaR = sqrt(pow(delta_x(0, 0), 2) +
-                                                        pow(delta_x(1, 0), 2) +
-                                                        pow(delta_x(2, 0), 2)); 
-            double deltaT = sqrt(pow(delta_x(3, 0) * 100, 2) 
-                                                    + pow(delta_x(4, 0) * 100, 2) 
-                                                    + pow(delta_x(5, 0) * 100, 2)); // unit:cm  
-            // delta_x很小，认为收敛   
-            if (deltaR < 0.0009 && deltaT < 0.05) {   // 角度变化 < 0.05度  位置变化 < 0.05 cm 
-                return true; 
+                    }
+                #endif
+                updateState(delta_x);
+                updateResidual(); 
             }
             return false; 
         }
@@ -445,7 +466,7 @@ class EdgeSurfFeatureRegistration : public RegistrationBase<_PointType> {
                                                             + pow(delta_x(4, 0) * 100, 2) 
                                                             + pow(delta_x(5, 0) * 100, 2)); // unit:cm  
                     // delta_x很小，认为收敛   
-                    if (deltaR < 0.0009 && deltaT < 0.05) {   // 角度变化 < 0.05度  位置变化 < 0.05 cm
+                    if (deltaR < 0.0005 && deltaT < 0.03) {   // 角度变化 < 0.03度  位置变化 < 0.03 cm
                         // LOG(INFO) << "LM converge";
                         return true; 
                     }
@@ -461,9 +482,7 @@ class EdgeSurfFeatureRegistration : public RegistrationBase<_PointType> {
                     Eigen::Vector3d old_t_w_l = t_w_l_;
                     Eigen::Quaterniond old_q_w_l = q_w_l_;
                     updateState(delta_x);// 更新当前位姿 x = x + delta_x
-                    TicToc tt;
                     double currChi = updateResidual();     // 求解当前状态更新后的残差 
-                    tt.toc("updateResidual ");
                     // 计算线性近似的下降值   L(0) - L(delta_x)
                     double linear_approximation = 0;
                     linear_approximation = delta_x.transpose() * (current_lambda * delta_x - JTR);
@@ -501,27 +520,27 @@ class EdgeSurfFeatureRegistration : public RegistrationBase<_PointType> {
         //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         double calcResidual() {
             double residual = 0;  
-            int edge_point_num = edge_matched_info_.size(); 
-            int surf_point_num = surf_matched_info_.size(); 
-            int all_point_num = surf_point_num + edge_point_num; 
-            /**
-             * @todo 使用多线程加速
-             */
-            for (int i = 0; i < all_point_num; i++) {
-                if (i < edge_point_num) {
-                    if (!edge_matched_info_[i].is_valid_) {
-                        continue; 
-                    }
-                    residual += pow(edge_matched_info_[i].residuals_, 2);
-                } else {
-                    int surf_ind = i - edge_point_num;
-                    if (!surf_matched_info_[surf_ind].is_valid_) {
-                        continue; 
-                    }
-                    residual += pow(surf_matched_info_[surf_ind].residuals_, 2);
-                }
+            for (int i = 0; i < surf_num_; i++) {
+                residual += pow(surf_matched_info_[i].residuals_, 2);
             }
             return residual;  
+        }
+
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        void updateResidualSingleThread(int const& index_start, int const& index_end, double* res) {
+            // 计算更新状态后的残差 
+            *res = 0.; 
+            // 遍历匹配数据 
+            for (int i = index_start; i < index_end; i++) {
+                // 激光系下点的坐标 
+                Eigen::Vector3d point_in_map = q_w_l_ * origin_surf_points_[i] + t_w_l_;  
+                // 平面参数 
+                Eigen::Vector3d& norm_ = surf_matched_info_[i].norm_; 
+                double& D_ = surf_matched_info_[i].D_;  
+                // 更新残差  
+                surf_matched_info_[i].residuals_ = norm_.dot(point_in_map) + D_;
+                *res += pow(surf_matched_info_[i].residuals_, 2); 
+            }
         }
 
         //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -530,14 +549,40 @@ class EdgeSurfFeatureRegistration : public RegistrationBase<_PointType> {
          */        
         double updateResidual() {
             // 计算更新状态后的残差 
-            int edge_point_num = edge_matched_info_.size(); 
-            int surf_point_num = surf_matched_info_.size(); 
             double curr_residual = 0.; 
+            // 实测 多线程竟然比单线程要慢不少！！
+            // int thread_count = thread::hardware_concurrency();
+            // if (thread_count > surf_num_) {
+            //     thread_count = 1;
+            // }
+            // // 准备好线程
+            // std::vector<std::thread> ths;
+            // ths.resize(thread_count);
+            // // 结果容器
+            // std::vector<double> results;
+            // results.resize(thread_count, 0);
+
+            // int slice_size = surf_num_ / thread_count;
+            // int remainder = surf_num_ % thread_count;
+            // for (int n = 0; n < thread_count; n++) {
+            //     int offset = n * slice_size;   // 偏移
+            //     int count = slice_size;
+            //     // 最后一个线程
+            //     if (thread_count != 1 && n == thread_count - 1) {
+            //         count += remainder;
+            //     } 
+            //     //cout<<"thread : "<<n<<",offset:" << offset << ", count: " << count<<endl;
+            //     ths[n] = std::thread(std::bind(&EdgeSurfFeatureRegistration<_PointType>::updateResidualSingleThread, 
+            //         this, offset, offset + count, &results[n]));
+            // }
+            // // 等待所有线程完成
+            // for (int n = 0; n < thread_count; n++) {
+            //     ths[n].join();  
+            //     curr_residual += results[n];
+            // }
+
             // 遍历匹配数据 
-            for (int i = 0; i < surf_point_num; i++) {
-                if (!surf_matched_info_[i].is_valid_) {
-                    continue; 
-                }
+            for (int i = 0; i < surf_num_; i++) {
                 // 激光系下点的坐标 
                 Eigen::Vector3d point_in_map = q_w_l_ * origin_surf_points_[i] + t_w_l_;  
                 // 平面参数 
@@ -581,6 +626,8 @@ class EdgeSurfFeatureRegistration : public RegistrationBase<_PointType> {
         std::vector<Eigen::Vector3d> origin_edge_points_;
         std::vector<SurfCostFactorInfo> surf_matched_info_;
         std::vector<EdgeCostFactorInfo> edge_matched_info_;
+        std::vector<uint32_t> surf_index_;
+        std::vector<uint32_t> edge_index_;
         // 匹配器 
         EdgeFeatureMatch<_PointType> edge_match_;
         SurfFeatureMatch<_PointType> surf_match_;

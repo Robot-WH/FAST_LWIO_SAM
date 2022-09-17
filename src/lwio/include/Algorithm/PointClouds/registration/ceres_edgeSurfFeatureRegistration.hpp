@@ -114,12 +114,12 @@ class CeresEdgeSurfFeatureRegistration : public RegistrationBase<_PointType> {
                 if (iterCount == optimization_count_ - 1) {
                     save_match_info = true;   // 最后一次迭代需要保存匹配的信息 
                 }
-                TicToc tt;
+                // TicToc tt;
                 // 进行tbb加速
                 // 耗时的重点！！！
                 addEdgeCostFactor(problem, loss_function, save_match_info);
                 addSurfCostFactor(problem, loss_function, save_match_info);
-                tt.toc("addCostFactor ");
+                // tt.toc("addCostFactor ");
                 ceres::Solver::Options options;
                 options.linear_solver_type = ceres::DENSE_QR;
                 options.trust_region_strategy_type = ceres::LEVENBERG_MARQUARDT; 
