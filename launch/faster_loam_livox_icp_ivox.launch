@@ -7,7 +7,7 @@
 
     <!-- Parameters -->
     <!-- <rosparam file="$(find liv_slam)/config/liv_params.yaml" command="load" /> -->
-    <!-- "/rslidar_points" /points_raw   /left/velodyne_points -->
+    <!-- "/rslidar_points" /points_raw   /left/velodyne_points   /livox/lidar-->
     <param name="ParamPath" value="$(find lwio)/config/livox_icp_ivox.yaml" />
     <param name="LidarTopic" value="/livox/lidar" />
     <param name="LidarType" value="0" />   <!--0: livox, 1:velodyne--> 

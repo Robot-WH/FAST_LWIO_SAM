@@ -7,7 +7,7 @@ preprocess:
   downsampling:
     mode: VoxelGrid    # VoxelGrid ， ApproximateVoxelGrid 
     VoxelGrid:
-      resolution: 0.5
+      resolution: 0.3
     ApproximateVoxelGrid:
   outlierRemoval: 
     mode: radiusOutlier # radiusOutlier, statisticalOutlier
@@ -31,10 +31,10 @@ tracker:
     point_plane_icp:
       solve: GN   # ceres, LM, GN  
       point_label: filtered 
-      max_iterater_count: 10
+      max_iterater_count: 10   # ICP 迭代的次数     每次迭代需要重新数据关联
       norm_iterater_count: 3
       LM:
-        max_iterater_count: 5
+        max_iterater_count: 5  # 优化算法求解的迭代次数   不用重新数据关联  
       GN:
         max_iterater_count: 5
     ndt:

@@ -1,7 +1,7 @@
 
 #ifndef _ROS_UTILS_HPP
 #define _ROS_UTILS_HPP
-
+#define PCL_NO_PRECOMPILE
 #include <vector>
 #include <cmath>
 #include <algorithm>
@@ -28,25 +28,13 @@
 #include <eigen3/Eigen/Dense>
 #include <opencv/cv.h>
 
-#include <pcl/point_cloud.h>
-#include <pcl/point_types.h>
-#include <pcl/search/impl/search.hpp>
-#include <pcl/range_image/range_image.h>
-#include <pcl/kdtree/kdtree_flann.h>
-#include <pcl/common/common.h>
-#include <pcl/common/transforms.h>
-#include <pcl/registration/icp.h>
-#include <pcl/io/pcd_io.h>
-#include <pcl/filters/filter.h>
-#include <pcl/filters/voxel_grid.h>
-#include <pcl/filters/crop_box.h> 
 #include <pcl_conversions/pcl_conversions.h>
 
 #include <glog/logging.h>
 #include <gflags/gflags.h>
 
-#include "tool/file_manager.hpp"
-#include "tic_toc.h"
+#include "lwio/tool/file_manager.hpp"
+#include "SlamLib/tic_toc.hpp"
 
 #include <ros/ros.h>
 
@@ -70,40 +58,6 @@
 #include <livox_ros_driver/CustomMsg.h>
 
 using namespace std;
-
-using PointInType = pcl::PointXYZI;
-using PointFeatureT = pcl::PointXYZI;
-
-// velodyne 激光点云格式
-struct EIGEN_ALIGN16 velodynePoint {
-    PCL_ADD_POINT4D;
-    float intensity;
-    float time;
-    std::uint16_t ring;
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-};
-POINT_CLOUD_REGISTER_POINT_STRUCT(velodynePoint,
-    (float, x, x)(float, y, y)(float, z, z)(float, intensity, intensity)
-    (float, time, time)(std::uint16_t, ring, ring));
-// ouster 激光点云格式
-struct EIGEN_ALIGN16 ousterPoint {
-    PCL_ADD_POINT4D;
-    float intensity;
-    uint32_t t;
-    uint16_t reflectivity;
-    uint8_t ring;
-    uint16_t ambient;
-    uint32_t range;
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-};
-// clang-format off
-POINT_CLOUD_REGISTER_POINT_STRUCT(ousterPoint,
-    (float, x, x)(float, y, y)(float, z, z)(float, intensity, intensity)
-    // use std::uint32_t to avoid conflicting with pcl::uint32_t
-    (std::uint32_t, t, t)(std::uint16_t, reflectivity, reflectivity)
-    (std::uint8_t, ring, ring)(std::uint16_t, ambient, ambient)
-    (std::uint32_t, range, range));
-
 
 // ros 读取参数   
 template <typename T>

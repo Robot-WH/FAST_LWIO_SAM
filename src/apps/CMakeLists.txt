@@ -13,7 +13,8 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS}")
 
 include_directories(
   include
-  ${SLAM_INCLUDE_DIR}
+  # ${MSAL3D_INCLUDE_DIR}
+  ${LWIO_INCLUDE_DIR}
   )
 
 # message(FATAL_ERROR ${SLAM_INCLUDE_DIR})
@@ -35,27 +36,43 @@ add_dependencies(faster_loam_node
 
 target_link_libraries(faster_loam_node
   ${catkin_LIBRARIES}
-  ${SLAM_LIBRARIES}
+  lwio
   /usr/local/lib/libtbb.so
   /usr/local/lib/libtbbmalloc.so
   /usr/local/lib/libtbbmalloc_proxy.so
 )
 
-add_executable(advanced_lio_sam_node
-  src/advanced_lio_sam_node.cpp
+add_executable(advanced_lio_node
+  src/advanced_lio_node.cpp
 )
 
-add_dependencies(advanced_lio_sam_node
+add_dependencies(advanced_lio_node
   ${catkin_EXPORTED_TARGETS}
 )
 
-target_link_libraries(advanced_lio_sam_node
+target_link_libraries(advanced_lio_node
   ${catkin_LIBRARIES}
-  ${SLAM_LIBRARIES}
+  lwio
   /usr/local/lib/libtbb.so
   /usr/local/lib/libtbbmalloc.so
   /usr/local/lib/libtbbmalloc_proxy.so
 )
+
+# add_executable(advanced_lio_sam_node
+#   src/advanced_lio_sam_node.cpp
+# )
+
+# add_dependencies(advanced_lio_sam_node
+#   ${catkin_EXPORTED_TARGETS}
+# )
+
+# target_link_libraries(advanced_lio_sam_node
+#   ${catkin_LIBRARIES}
+#   ${SLAM_LIBRARIES}
+#   /usr/local/lib/libtbb.so
+#   /usr/local/lib/libtbbmalloc.so
+#   /usr/local/lib/libtbbmalloc_proxy.so
+# )
 
 # add_executable(LWIO_SAM_node
 #   src/LWIO_SAM_node.cpp

@@ -1,4 +1,5 @@
 
+test: 10
 # 算法的配置文件 
 preprocess:
   downsampling_enable: true   # 是否使用降采样
@@ -31,18 +32,24 @@ tracker:
     point_plane_icp:
       solve: GN   # ceres, LM, GN  
       point_label: filtered 
-      max_iterater_count: 10
+      max_iterater_count: 10   # ICP 迭代的次数     每次迭代需要重新数据关联
       norm_iterater_count: 3
+      LM:
+        max_iterater_count: 5  # 优化算法求解的迭代次数   不用重新数据关联  
+      GN:
+        max_iterater_count: 5
     ndt:
     gicp:
     edge_plane_feature_icp:
       solve: ceres
       edge_label:
       plane_label:
+  
   keyframe_update:
     translation: 0.3
     rotation: 0.1
     time: 10
+  
   localmap:
     method: ivox  # time_sliding, area_sliding, ivox, ikdtree
     time_sliding:
@@ -54,7 +61,6 @@ tracker:
       resolution: 0.5      # 注意： downsampling_size 整数倍，即 resolution / downsampling_size = 1, 2, 3, 4,......
       nearby_type: 18   # 1, 6, 18, 26 
       capacity: 100000    # voxel的容量 
-
 
 
 mapping:

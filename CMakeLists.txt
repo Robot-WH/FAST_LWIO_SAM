@@ -76,6 +76,10 @@ catkin_package(
   message_generation
 )
 
+include(cmake/Macros.cmake)
+include(cmake/geographic.cmake)
+add_subdirectory(${PROJECT_SOURCE_DIR}/third_part/DataComm)
+
 include_directories(
 	${catkin_INCLUDE_DIRS} 
 	${PCL_INCLUDE_DIRS}
@@ -85,9 +89,10 @@ include_directories(
   ${OpenCV_INCLUDE_DIRS}
   ${GTSAM_INCLUDE_DIR}
   ${yaml-cpp_INCLUDE_DIRS}
+  ${MSAL3D_INCLUDE_DIR}
+  ${DataComm_INCLUDE_DIR}
 )
 
-include(cmake/Macros.cmake)
 add_subdirectory(src)
 
 

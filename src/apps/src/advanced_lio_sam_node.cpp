@@ -2,29 +2,25 @@
  * @Copyright(C): 
  * @Author: lwh
  * @Description:  fast_ligo (快速的激光-imu-gnss融合里程计)    
- *                                  特点： 1、基于滤波器(ESKF/IESKF)融合的LIO
- *                                                 2、使用isam融合GNSS和LIO
+ *                                  特点： 1、基于GTSAM融合imu-激光-gnss
+ *                                                 2、更好的软件架构 
  *                                                 3、基于faster_loam开发
  */
 #define PCL_NO_PRECOMPILE
 
 #include "ros_utils.hpp"
-#include "Sensor/sensor.hpp"
-#include "Sensor/lidar_data_type.h"
-#include "Common/pcl_type.h"
-#include "Common/color.hpp"
-#include "Algorithm/PointClouds/Process/Preprocess/RotaryLidarPreProcess.hpp"
-#include "Algorithm/PointClouds/Process/Segmentation/PointCloudRangeImageSegmentation.hpp"
-#include "Algorithm/PointClouds/Process/Segmentation/PointCloudSegmentation.hpp"
-#include "Algorithm/PointClouds/Process/FeatureExtract/LOAMFeatureProcessor_base.hpp"
-#include "LidarTracker/LidarTracker.hpp"
+#include "lwio/Sensor/sensor.hpp"
+#include "lwio/Sensor/lidar_data.h"
+#include "lwio/Common/pcl_type.h"
+#include "lwio/system.h"
+
 #include <execution>  // C++ 17 并行算法 
 #include <atomic>
 
 constexpr bool PARAM_ESTIMATE = true;  // 外参估计 
 using namespace std; 
-using namespace Slam3D; 
-using namespace Slam3D::Algorithm; 
+using namespace lwio; 
+// using namespace Slam3D::Algorithm; 
 using UsedPointT = PointXYZIRTD;
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -61,8 +57,20 @@ public:
         option_.num_scans_ = RosReadParam<int>(node_handle_, "LidarLineNum");
         option_.max_range_thresh_ = RosReadParam<float>(node_handle_, "MaxRangeThresh");
         option_.min_range_thresh_ = RosReadParam<float>(node_handle_, "MinRangeThresh");
-        option_.param_path_ = RosReadParam<std::string>(node_handle_, "ParamPath");
-    
+
+        System<UsedPointT>::Option system_option; 
+        system_option.param_path_ = RosReadParam<std::string>(node_handle_, "ParamPath");
+        if (type == LidarType::Livox) {
+            system_option.lidar_type_ = System<UsedPointT>::LidarType::Livox;
+        }
+        if (type == LidarType::Velodyne) {
+            system_option.lidar_type_ = System<UsedPointT>::LidarType::Velodyne;
+        }
+        if (type == LidarType::Ouster) {
+            system_option.lidar_type_ = System<UsedPointT>::LidarType::Ouster;
+        }
+        system_.reset(new System<UsedPointT>(system_option)); 
+
         preprocessed_pointcloud_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>(
             "preprocessed_pointcloud", 1, this);
         unstable_pointcloud_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>(
@@ -84,41 +92,10 @@ public:
         markers_publisher_ = node_handle_.advertise<visualization_msgs::MarkerArray>(
             "/cluster_markers", 10);        // 可视化
         // AccSigmaLimit_ = 0.002;
-        Init();  
     }
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    void Init() {
-        if (option_.lidar_type_ == LidarType::Livox) {
-            preprocess_.reset(new LidarPreProcess<UsedPointT>(option_.param_path_));    
-        } else if (option_.lidar_type_ == LidarType::Velodyne || option_.lidar_type_ == LidarType::Ouster) {
-            preprocess_.reset(new RotaryLidarPreProcess<UsedPointT>(option_.param_path_)); 
-        } 
-        // 构造tracker  
-        lidar_trackers_.reset(new LidarTracker<UsedPointT>(option_.param_path_)); 
-        pose_ = Eigen::Isometry3d::Identity(); 
-        
-        // LOAMFeatureExtractor<UsedPointT, UsedPointT>::Option featureExtract_option;
-        // featureExtract_option.lidar_freq_ = 19.3;
-        // //featureExtract_option.lidar_freq_ = 10;
-        // featureExtract_option.horizon_angle_resolution_ = 0.386;
-        // //featureExtract_option.horizon_angle_resolution_ = 0.2;
-        // featureExtract_option.edge_thresh_ = 1; 
-        // feature_extractor_.reset(new LOAMFeatureExtractor<UsedPointT, UsedPointT>(featureExtract_option));
-        // PointCloudRangeImageSegmentation<UsedPointT>::Option seg_option; 
-        // seg_option.horizon_angle_resolution_ = 0.386;
-        // seg_option.segment_angle_thresh_ = 0.05;
-        // segmentation_.reset(new PointCloudRangeImageSegmentation<UsedPointT>(seg_option)); 
-        // PointCloudSegmentation<UsedPointT>::Option seg_option; 
-        // seg_option.horizon_angle_resolution_ = 0.386;
-        // seg_option.segment_angle_thresh_ = 0.05;
-        // segmentation_.reset(new PointCloudSegmentation<UsedPointT>(seg_option)); 
-        // PointCloudSegmentation<UsedPointT>::Option seg_option; 
-        // segmentation_.reset(new PointCloudSegmentation<UsedPointT>(seg_option)); 
-    }
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    void imuHandler( sensor_msgs::ImuConstPtr const& imu_msg) {
+    void imuHandler(sensor_msgs::ImuConstPtr const& imu_msg) {
         // 保证队列中 数据的顺序正确 
         // m_buf.lock();
         static double last_imu_t = -1; 
@@ -128,42 +105,42 @@ public:
         }
         last_imu_t = imu_msg->header.stamp.toSec();
         // 解析IMU数据 
-        ImuDataPtr imu_data_ptr = std::make_shared<ImuData>();
+        sensor::ImuData imu_data;
         // 保存时间戳 
-        imu_data_ptr->timestamp_ = imu_msg->header.stamp.toSec();
-        imu_data_ptr->acc_ << imu_msg->linear_acceleration.x, 
+        imu_data.timestamp_ = imu_msg->header.stamp.toSec();
+        imu_data.acc_ << imu_msg->linear_acceleration.x, 
                             imu_msg->linear_acceleration.y,
                             imu_msg->linear_acceleration.z;
-        imu_data_ptr->gyro_ << imu_msg->angular_velocity.x,
+        imu_data.gyro_ << imu_msg->angular_velocity.x,
                             imu_msg->angular_velocity.y,
                             imu_msg->angular_velocity.z;
-        imu_data_ptr->rot_.w() = imu_msg->orientation.w;
-        imu_data_ptr->rot_.x() = imu_msg->orientation.x;
-        imu_data_ptr->rot_.y() = imu_msg->orientation.y;
-        imu_data_ptr->rot_.z() = imu_msg->orientation.z;
-        imu_buf_.push(imu_data_ptr);
-        // m_buf.unlock();
+        imu_data.rot_.w() = imu_msg->orientation.w;
+        imu_data.rot_.x() = imu_msg->orientation.x;
+        imu_data.rot_.y() = imu_msg->orientation.y;
+        imu_data.rot_.z() = imu_msg->orientation.z;
+        system_->InputData(imu_data);
     }
 
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     void gnssHandler(sensor_msgs::NavSatFixConstPtr const& navsat_msg) {
         // 保证队列中 数据的顺序正确 
         // m_buf.lock();
-        // static double last_gnss_t = -1; 
-        // if (navsat_msg->header.stamp.toSec() <= last_gnss_t) {
-        //     ROS_WARN("gnss message in disorder!");
-        //     return;
-        // }
-        // last_gnss_t = navsat_msg->header.stamp.toSec();
-        // // 解析Gnss数据 
-        // Sensor::GnssDataPtr gnss_data_ptr = std::make_shared<Sensor::GnssData>();
-        // // 保存时间戳 
-        // gnss_data_ptr->timestamp = navsat_msg->header.stamp.toSec();
-        // gnss_data_ptr->lla << navsat_msg->latitude,
-        //                     navsat_msg->longitude,
-        //                     navsat_msg->altitude;
-        // gnss_data_ptr->cov = Eigen::Map<const Eigen::Matrix3d>(navsat_msg->position_covariance.data());
-        // gnss_buf.push(gnss_data_ptr);
+        static double last_gnss_t = -1; 
+        if (navsat_msg->header.stamp.toSec() <= last_gnss_t) {
+            ROS_WARN("gnss message in disorder!");
+            return;
+        }
+        last_gnss_t = navsat_msg->header.stamp.toSec();
+        // 解析Gnss数据 
+        sensor::GnssData gnss_data;
+        // 保存时间戳 
+        gnss_data.timestamp_ = navsat_msg->header.stamp.toSec();
+        gnss_data.lla_ << navsat_msg->latitude,
+                            navsat_msg->longitude,
+                            navsat_msg->altitude;
+        gnss_data.cov_ = Eigen::Map<const Eigen::Matrix3d>(navsat_msg->position_covariance.data());
+        system_->InputData(gnss_data);
+        // gnss_buf_.push(gnss_data_ptr);
         // m_buf.unlock();
     }
 
@@ -181,24 +158,16 @@ public:
         // 根据不同的激光雷达进行相应的处理 - 将激光数据从 ros msg中提取出来 
         switch (option_.lidar_type_) {
             case LidarType::Ouster:
-            {
                 OusterLidarHandler(cloud_msg, extracted_data);   // 从ros msg 中提取出点云数据
-                PointCloudProcess(extracted_data); 
                 break;
-            }
             case LidarType::Velodyne:
-            {
                 VelodyneLidarHandler(cloud_msg, extracted_data);
-                PointCloudProcess(extracted_data); 
                 break;
-            }
             default:
-            {
                 LOG(ERROR) << "Error LiDAR Type";
                 break;
-            }
         }
-        
+        system_->InputData(extracted_data);
         // // 点云发布
         // publishLidarScan();
         // //pubMarker(); 
@@ -227,7 +196,8 @@ public:
         //     LOG(INFO) << "avg time:"<<sum / 500; 
         // }
         // 点云处理 - 包括预处理、去畸变、聚类、特征提取等
-        PointCloudProcess(extracted_data); 
+        //PointCloudProcess(extracted_data); 
+        system_->InputData(extracted_data);
         tt.toc("Process "); 
         // 点云发布
         //publishLidarScan();
@@ -236,9 +206,9 @@ public:
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     void LivoxHandler(const livox_ros_driver::CustomMsg::ConstPtr &msg, 
             LidarData<UsedPointT> &extracted_data) {
-        extracted_data.timestamp = msg->header.stamp.toSec();
+        extracted_data.timestamp_ = msg->header.stamp.toSec();
         int plsize = msg->point_num;
-        extracted_data.point_cloud->reserve(plsize);
+        extracted_data.point_cloud_->reserve(plsize);
         pcl::PointCloud<UsedPointT> cloud_full;
         cloud_full.resize(plsize);
         std::vector<bool> is_valid_pt(plsize, false);
@@ -279,10 +249,10 @@ public:
         });
         for (uint i = 1; i < plsize; i++) {
             if (is_valid_pt[i]) {
-                extracted_data.point_cloud->points.push_back(cloud_full[i]);
+                extracted_data.point_cloud_->points.push_back(cloud_full[i]);
             }
         }
-        // LOG(INFO) <<"extracted_data num:"<<extracted_data.point_cloud->size(); 
+        // LOG(INFO) <<"extracted_data num:"<<extracted_data.point_cloud_->size(); 
     }
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -291,7 +261,7 @@ public:
      */        
     void OusterLidarHandler(const sensor_msgs::PointCloud2ConstPtr &cloud_msg,
             LidarData<UsedPointT>& extracted_data) {
-        extracted_data.timestamp = cloud_msg->header.stamp.toSec();
+        extracted_data.timestamp_ = cloud_msg->header.stamp.toSec();
         pcl::PointCloud<ousterPoint> pl_orig;
         pcl::fromROSMsg<ousterPoint>(*cloud_msg, pl_orig);
         // 去除Nan
@@ -318,7 +288,7 @@ public:
             added_pt.intensity = pl_orig.points[i].intensity;
             added_pt.time = pl_orig.points[i].t / 1e6;  // curvature unit: ms
             added_pt.range = sqrt(range); 
-            extracted_data.point_cloud->points.push_back(added_pt);
+            extracted_data.point_cloud_->points.push_back(added_pt);
         }
     }
 
@@ -328,7 +298,7 @@ public:
      */        
     void VelodyneLidarHandler(const sensor_msgs::PointCloud2ConstPtr &cloud_msg,
             LidarData<UsedPointT>& extracted_data) {
-        extracted_data.timestamp = cloud_msg->header.stamp.toSec();
+        extracted_data.timestamp_ = cloud_msg->header.stamp.toSec();
         pcl::PointCloud<velodynePoint> pl_orig;
         pcl::fromROSMsg<velodynePoint>(*cloud_msg, pl_orig);
         // 去除Nan
@@ -336,11 +306,12 @@ public:
         pcl::removeNaNFromPointCloud<velodynePoint>(pl_orig, pl_orig, indices);
         float max_range_thresh_2 = option_.max_range_thresh_ * option_.max_range_thresh_;
         float min_range_thresh_2 = option_.min_range_thresh_ * option_.min_range_thresh_;
-        for (int i = 0; i < pl_orig.points.size(); i++) {
-            if (i % option_.simple_point_filter_res_ != 0) continue;   
 
-            double range = pl_orig.points[i].x * pl_orig.points[i].x + pl_orig.points[i].y * pl_orig.points[i].y +
-                        pl_orig.points[i].z * pl_orig.points[i].z;
+        for (int i = 0; i < pl_orig.points.size(); i++) {
+            if (i % option_.simple_point_filter_res_ != 0) continue;   // 一般不用
+
+            double range = pl_orig.points[i].x * pl_orig.points[i].x + pl_orig.points[i].y * pl_orig.points[i].y 
+                + pl_orig.points[i].z * pl_orig.points[i].z;
 
             if (range < min_range_thresh_2 || range > max_range_thresh_2) {
                 continue;
@@ -354,46 +325,19 @@ public:
             added_pt.intensity = pl_orig.points[i].intensity;
             added_pt.time = pl_orig.points[i].time * 1e-3;  // curvature unit: ms
             added_pt.range = sqrt(range); 
-            extracted_data.point_cloud->points.push_back(added_pt);
+            extracted_data.point_cloud_->points.push_back(added_pt);
         }
-    }
-
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    /**
-     * @brief: 点云处理  1、预处理  2、去畸变   3、特征提取 
-     * @param ori_data 从ros msg中提取出来的点云数据
-     */        
-    void PointCloudProcess(LidarData<UsedPointT>& data) {
-        TicToc tt; 
-        // 预处理
-        //LOG(INFO) << "before process, point num:"<<data.point_cloud->size();
-        preprocess_->Process(data); 
-        preprocessed_cloud_ = data.point_cloud; 
-        // LOG(INFO) << "after process, point num:"<<data.point_cloud->size();
-        // 去畸变
-        // 特征提取 / 直接法 
-        CloudContainer<UsedPointT> feature_points;  
-        feature_points. time_stamp_ = data.timestamp; 
-        feature_points.pointcloud_data_.insert(make_pair("filtered", std::move(data.point_cloud)));  
-        // try {
-        //     feature_extractor_->Extract(data, feature_points); 
-        // } catch(const char* e) {
-        //     std::cerr <<common::RED<< e << common::RESET<<'\n';
-        //     return; 
-        // }
-        // 处理好的点云数据 放置到缓存队列中  等待  估计器使用  
-        processed_points_.push_back(std::move(feature_points));  
     }
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     void publishLidarScan() {
         sensor_msgs::PointCloud2 laserCloudTemp;
-        if (preprocessed_pointcloud_publisher_.getNumSubscribers() != 0) {
-            pcl::toROSMsg(*preprocessed_cloud_, laserCloudTemp);
-            laserCloudTemp.header.stamp = cloud_header_.stamp;
-            laserCloudTemp.header.frame_id = "lidar";
-            preprocessed_pointcloud_publisher_.publish(laserCloudTemp);
-        }
+        // if (preprocessed_pointcloud_publisher_.getNumSubscribers() != 0) {
+        //     pcl::toROSMsg(*preprocessed_cloud_, laserCloudTemp);
+        //     laserCloudTemp.header.stamp = cloud_header_.stamp;
+        //     laserCloudTemp.header.frame_id = "lidar";
+        //     preprocessed_pointcloud_publisher_.publish(laserCloudTemp);
+        // }
 
         // if (nonground_pointcloud_publisher_.getNumSubscribers() != 0) {
         //     pcl::PointCloud<UsedPointT> const& nonground_points = 
@@ -459,127 +403,78 @@ public:
         //         surf_feature_publisher_.publish(laserCloudTemp);
         //     }
         // }
-        if (surf_feature_publisher_.getNumSubscribers() != 0) {
-            CloudContainer<UsedPointT> const& processed_points = processed_points_.back();
-            if (processed_points.pointcloud_data_.find("bad_point") != processed_points.pointcloud_data_.end()) {
-                pcl::toROSMsg(*processed_points.pointcloud_data_.at("bad_point"), laserCloudTemp);
-                laserCloudTemp.header.stamp = cloud_header_.stamp;
-                laserCloudTemp.header.frame_id = "base_link";
-                surf_feature_publisher_.publish(laserCloudTemp);
-            }
-        }
-    }
-
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    void publishLocalMapCloud(ros::Time const& stamp) {
-        LidarTracker<UsedPointT>::LocalMapContainer local_maps = lidar_trackers_->GetLocalMap();
-        for (auto const& iter : local_maps) {
-            if (iter.first == "loam_edge") {
-                // publishCloud( &pubLocalMapEdge[id],    // 发布该点云的话题 
-                //                                 iter->second,   // 边缘特征   
-                //                                 stamp, odom_frame);     
-            } else if (iter.first == "loam_surf") {
-                // publishCloud( &pubLocalMapSurf[id],    // 发布该点云的话题 
-                //                                 iter->second,   // 点云数据   
-                //                                 stamp, odom_frame);     
-            } else if (iter.first == "filtered") {     // 滤波后的 
-                publishCloud<UsedPointT>( &local_map_filtered_publisher_,    // 发布该点云的话题 
-                                                iter.second,   // 点云数据   
-                                                stamp, "odom");     
-            }
-        }
-    }
-
-    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    void pubMarker() {
-        // if (markers_publisher_.getNumSubscribers()) {
-            std::vector<PointCloudSegmentation<UsedPointT>::ClusterInfo> const& cluster_info 
-                = segmentation_->GetClusterInfo();
-            // std::vector<PointCloudRangeImageSegmentation<UsedPointT>::ClusterInfo> const& cluster_info 
-            //     = segmentation_->GetClusterInfo();
-            
-            int size = cluster_info.size(); 
-
-            visualization_msgs::MarkerArray markers;
-            markers.markers.resize(size);
-            for (int i = 0; i < size; i++) {
-                // sphere
-                visualization_msgs::Marker& sphere_marker = markers.markers[i];
-                sphere_marker.header.frame_id = "base_link";
-                sphere_marker.header.stamp = cloud_header_.stamp;
-                sphere_marker.ns = "cluster";
-                sphere_marker.id = i;
-                sphere_marker.type = visualization_msgs::Marker::SPHERE;
-
-                sphere_marker.pose.position.x = cluster_info[i].centre_.x();
-                sphere_marker.pose.position.y = cluster_info[i].centre_.y();
-                sphere_marker.pose.position.z = cluster_info[i].centre_.z();
-
-                sphere_marker.pose.orientation.w = 1.0;
-                sphere_marker.scale.x = sphere_marker.scale.y = 
-                    sphere_marker.scale.z = 2 * cluster_info[i].direction_max_value_[2];
-                //sphere_marker.scale.x = sphere_marker.scale.y = sphere_marker.scale.z = 1;
-                sphere_marker.color.r = 1.0;
-                sphere_marker.color.a = 0.3;
-            }
-            markers_publisher_.publish(markers);
+        // if (surf_feature_publisher_.getNumSubscribers() != 0) {
+        //     CloudContainer<UsedPointT> const& processed_points = processed_points_.back();
+        //     if (processed_points.pointcloud_data_.find("bad_point") != processed_points.pointcloud_data_.end()) {
+        //         pcl::toROSMsg(*processed_points.pointcloud_data_.at("bad_point"), laserCloudTemp);
+        //         laserCloudTemp.header.stamp = cloud_header_.stamp;
+        //         laserCloudTemp.header.frame_id = "base_link";
+        //         surf_feature_publisher_.publish(laserCloudTemp);
+        //     }
         // }
     }
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    /**
-     * @brief: 激光去除畸变->获取激光匹配预测位姿->激光
-     * @details: 
-     * 激光+IMU融合(外参已知)：
-     *      
-     * 激光 + odom:
-     *      1、初始化： 外参在线标定(平地，慢速，绕8字)
-     *      2、odom给匹配初值 + 去畸变 (平地)
-     * 激光 + odom&imu:
-     *      1、初始化 
-     *      2、odom+imu给匹配初值 + 去畸变 
-     *      3、激光里程计 、odom + imu 滑动窗口优化
-     *     
-     */        
-    void Estimator() {
-        while(1) {
-            std::unique_lock<std::mutex> laser_lock(laser_mt_);
-            if (processed_points_.size() >= 2) {
-                CloudContainer<UsedPointT> const& feature_data = processed_points_.front(); 
-                Eigen::Isometry3d delta_pose_ = Eigen::Isometry3d::Identity();    // 运动增量   
-                TicToc tt;
-                lidar_trackers_->Solve(feature_data, delta_pose_);   
-                tt.toc("lidar tracker "); 
-                pose_ = pose_ * delta_pose_; // 当前帧的绝对运动   
-                Eigen::Vector3f p = pose_.translation().cast<float>();
-                Eigen::Quaternionf quat(pose_.rotation().cast<float>());
-                quat.normalize();
-                ros::Time stamp = ros::Time(feature_data.time_stamp_);  
-                // 发布tf 
-                PublishTF(p, quat, stamp, "odom", "lidar"); 
-                // 发布localmap
-                if (lidar_trackers_->HasUpdataLocalMap()) {
-                    publishLocalMapCloud(stamp);
-                }
-                sensor_msgs::PointCloud2 laserCloudTemp;
-                if (preprocessed_pointcloud_publisher_.getNumSubscribers() != 0) {
-                    pcl::toROSMsg(*feature_data.pointcloud_data_.at("filtered"), laserCloudTemp);
-                    laserCloudTemp.header.stamp = stamp;
-                    laserCloudTemp.header.frame_id = "lidar";
-                    preprocessed_pointcloud_publisher_.publish(laserCloudTemp);
-                }
-                processed_points_.pop_front(); 
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
+    void publishLocalMapCloud(ros::Time const& stamp) {
+        // LidarTracker<UsedPointT>::LocalMapContainer local_maps = lidar_trackers_->GetLocalMap();
+        // for (auto const& iter : local_maps) {
+        //     if (iter.first == "loam_edge") {
+        //         // publishCloud( &pubLocalMapEdge[id],    // 发布该点云的话题 
+        //         //                                 iter->second,   // 边缘特征   
+        //         //                                 stamp, odom_frame);     
+        //     } else if (iter.first == "loam_surf") {
+        //         // publishCloud( &pubLocalMapSurf[id],    // 发布该点云的话题 
+        //         //                                 iter->second,   // 点云数据   
+        //         //                                 stamp, odom_frame);     
+        //     } else if (iter.first == "filtered") {     // 滤波后的 
+        //         publishCloud<UsedPointT>( &local_map_filtered_publisher_,    // 发布该点云的话题 
+        //                                         iter.second,   // 点云数据   
+        //                                         stamp, "odom");     
+        //     }
+        // }
+    }
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    void pubMarker() {
+        // // if (markers_publisher_.getNumSubscribers()) {
+        //     std::vector<PointCloudSegmentation<UsedPointT>::ClusterInfo> const& cluster_info 
+        //         = segmentation_->GetClusterInfo();
+        //     // std::vector<PointCloudRangeImageSegmentation<UsedPointT>::ClusterInfo> const& cluster_info 
+        //     //     = segmentation_->GetClusterInfo();
+            
+        //     int size = cluster_info.size(); 
+
+        //     visualization_msgs::MarkerArray markers;
+        //     markers.markers.resize(size);
+        //     for (int i = 0; i < size; i++) {
+        //         // sphere
+        //         visualization_msgs::Marker& sphere_marker = markers.markers[i];
+        //         sphere_marker.header.frame_id = "base_link";
+        //         sphere_marker.header.stamp = cloud_header_.stamp;
+        //         sphere_marker.ns = "cluster";
+        //         sphere_marker.id = i;
+        //         sphere_marker.type = visualization_msgs::Marker::SPHERE;
+
+        //         sphere_marker.pose.position.x = cluster_info[i].centre_.x();
+        //         sphere_marker.pose.position.y = cluster_info[i].centre_.y();
+        //         sphere_marker.pose.position.z = cluster_info[i].centre_.z();
+
+        //         sphere_marker.pose.orientation.w = 1.0;
+        //         sphere_marker.scale.x = sphere_marker.scale.y = 
+        //             sphere_marker.scale.z = 2 * cluster_info[i].direction_max_value_[2];
+        //         //sphere_marker.scale.x = sphere_marker.scale.y = sphere_marker.scale.z = 1;
+        //         sphere_marker.color.r = 1.0;
+        //         sphere_marker.color.a = 0.3;
+        //     }
+        //     markers_publisher_.publish(markers);
+        // // }
     }
 
 private:
-    using LidarTrackerPtr = std::unique_ptr<LidarTracker<UsedPointT>>;  
     enum LidarType {Livox = 0, Velodyne, Ouster};
+    enum class SensorType {Lidar, Imu, Gnss};
     struct Option {
         LidarType lidar_type_; 
-        std::string param_path_; 
         int num_scans_;   // 激光的线数 
         uint16_t simple_point_filter_res_ = 1;
         float min_range_thresh_ = -1;
@@ -613,23 +508,12 @@ private:
     std::string laser_frame = ""; 
     std::mutex laser_mt_;  
 
-    std::deque<LidarData<UsedPointT>> lidar_buf_;
-    std::queue<ImuDataPtr> imu_buf_;  
-    std::queue<GnssDataPtr> gnss_buf_;    
-    std::deque<CloudContainer<UsedPointT>> processed_points_;
-    std::unique_ptr<LidarPreProcess<UsedPointT>> preprocess_;  
-    LidarTrackerPtr lidar_trackers_;  
-    //std::unique_ptr<PointCloudRangeImageSegmentation<UsedPointT>> segmentation_;  
-    std::unique_ptr<PointCloudSegmentation<UsedPointT>> segmentation_;  
-    std::unique_ptr<LOAMFeatureExtractor<UsedPointT, UsedPointT>> feature_extractor_;  
-    pcl::PointCloud<UsedPointT>::ConstPtr preprocessed_cloud_; 
-    Eigen::Isometry3d pose_;    // 运动
+    std::unique_ptr<System<UsedPointT>> system_;  
 };
 
 int main(int argc, char **argv) {
     ros::init(argc, argv, "faster_loam");
     LIGORosNode node;
-    std::thread estimator(&LIGORosNode::Estimator, &node); 
     ros::spin(); 
     return (0);
 }
