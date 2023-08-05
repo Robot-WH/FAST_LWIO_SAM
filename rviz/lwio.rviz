@@ -173,7 +173,7 @@ Visualization Manager:
       Queue Size: 1
       Selectable: true
       Size (Pixels): 1
-      Size (m): 0.5
+      Size (m): 0.30000001192092896
       Style: Flat Squares
       Topic: /preprocessed_pointcloud
       Unreliable: false
@@ -233,7 +233,7 @@ Visualization Manager:
       Queue Size: 1
       Selectable: true
       Size (Pixels): 1
-      Size (m): 0.20000000298023224
+      Size (m): 0.4000000059604645
       Style: Flat Squares
       Topic: /ground_cloud
       Unreliable: false
@@ -298,25 +298,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/XYOrbit
-      Distance: 46.938358306884766
+      Distance: 18.84395980834961
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 13.369122505187988
-        Y: 14.557300567626953
-        Z: -3.284115791320801
+        X: -0.5511355400085449
+        Y: -1.5232658386230469
+        Z: -3.28411865234375
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.6647971272468567
+      Pitch: 0.6247975826263428
       Target Frame: base
       Value: XYOrbit (rviz)
-      Yaw: 1.3540656566619873
+      Yaw: 3.5290465354919434
     Saved: ~
 Window Geometry:
   Displays:
@@ -334,5 +334,5 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 1083
-  X: 578
-  Y: 124
+  X: 649
+  Y: 164

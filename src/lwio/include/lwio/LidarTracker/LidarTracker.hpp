@@ -193,7 +193,7 @@ public:
                 unground_points->push_back(data.feature_data_.at(feature_res.first)->points[i]);  // 收集所有非地面点
                 // 动态候选点  1、匹配误差较大    2、只考虑一定距离范围内(50m内)
                 if (std::fabs(feature_res.second.residuals_[i]) > 0.2 && 
-                        data.feature_data_.at(feature_res.first)->points[i].range < 50 &&
+                        data.feature_data_.at(feature_res.first)->points[i].range < 80 &&
                         data.feature_data_.at(feature_res.first)->points[i].z < 1) {
                     candidate_dynamic_cloud_index_1.push_back(point_index);   // 收集可能的动态点  
                 }
@@ -271,13 +271,19 @@ public:
                     if (p.range < ref_keyframe_range_img.at<float>(v_index, h_index) - 1) {   
                         // std::cout << "cell is 200 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
                         dynamic_cloud_->push_back(unground_points->points[index]);  
-                        std::cout << "p.range: " << p.range << ", ref_keyframe_range_img : " << ref_keyframe_range_img.at<float>(v_index, h_index) << std::endl;
+                        //std::cout << "p.range: " << p.range << ", ref_keyframe_range_img : " << ref_keyframe_range_img.at<float>(v_index, h_index) << std::endl;
+                    } else if (p.range > ref_keyframe_range_img.at<float>(v_index, h_index) + 0.5 &&
+                                        p.range < ref_keyframe_range_img.at<float>(v_index, h_index) + 20) {
+                        // 根据参考帧激光雷达坐标正向和动态点出现的方向进行判断，
+                        // 如果参考帧原点到动态点的向量与x轴正向的夹角小与5度，认为是动态
+                        if (std::fabs(p.x) * 0.087 > std::fabs(p.y)) {
+                            dynamic_cloud_->push_back(unground_points->points[index]);  
+                        }
                     }
                 }
             }
 
             std::cout << "dynamic_cloud_ size: " << dynamic_cloud_->size() << std::endl;
-
         }
 
 
