@@ -275,9 +275,14 @@ public:
                     } else if (p.range > ref_keyframe_range_img.at<float>(v_index, h_index) + 0.5 &&
                                         p.range < ref_keyframe_range_img.at<float>(v_index, h_index) + 20) {
                         // 根据参考帧激光雷达坐标正向和动态点出现的方向进行判断，
-                        // 如果参考帧原点到动态点的向量与x轴正向的夹角小与5度，认为是动态
+                        // 如果参考帧原点到动态点的向量与x轴正向的夹角小与5度，
+                        // 且运动方向向量与参考帧坐标系X轴方向接近，则认为是动态
                         if (std::fabs(p.x) * 0.087 > std::fabs(p.y)) {
-                            dynamic_cloud_->push_back(unground_points->points[index]);  
+                            const auto& t = curr_to_ref_keyframe.translation();
+                            // 运动方向向量与x轴的夹角小与3度  
+                            if (std::fabs(t.x()) * 0.0524 >= std::fabs(t.y())) {
+                                dynamic_cloud_->push_back(unground_points->points[index]);  
+                            }
                         }
                     }
                 }
