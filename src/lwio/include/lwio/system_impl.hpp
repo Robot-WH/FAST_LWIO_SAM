@@ -164,6 +164,7 @@ void System<_PointT>::processMeasurements() {
                 result.pointcloud_ = curr_lidar_data.feature_data_;
                 result.pointcloud_.insert(curr_lidar_data.pointcloud_data_.begin(), curr_lidar_data.pointcloud_data_.end());
                 result.pointcloud_["dynamic_points"] = lidar_trackers_->GetDynamicCloud();  
+                result.pointcloud_["false_dynamic_points"] = lidar_trackers_->GetFalseDynamicCloud();  
                 
                 if (lidar_trackers_->HasUpdataLocalMap()) {
                     const auto& local_map = lidar_trackers_->GetLocalMap();  

@@ -40,6 +40,14 @@ public:
         float THRESHOLD_ROT_;  
         float TIME_INTERVAL_;  
     };
+    struct rangeImageOption {
+        uint16_t h_angle_res_ = 1;    // 水平角度分辨率  单位：度  
+        uint16_t v_angle_res_ = 10;  // 垂直角分辨率  
+        float h_angle_res_rad_ = h_angle_res_ * M_PI / 180;    // 水平角度分辨率  单位：度  
+        float v_angle_res_rad_ = v_angle_res_ * M_PI / 180;  // 垂直角分辨率  
+        uint16_t h_size_ = 360 / h_angle_res_;     
+        uint16_t v_size_ = 180 / v_angle_res_;   // 垂直视角  +-90 
+    }; 
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////
     /**
@@ -126,6 +134,7 @@ public:
         }
 
         dynamic_cloud_.reset(new pcl::PointCloud<_PointType>());
+        false_dynamic_cloud_.reset(new pcl::PointCloud<_PointType>());
     }
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -181,6 +190,7 @@ public:
         // step: 动态检测
         // 分析本次匹配各个点的匹配质量
         dynamic_cloud_->clear();  
+        false_dynamic_cloud_->clear();  
         RegistrationResult const& res = registration_ptr_->GetRegistrationResult(); 
         std::vector<uint32_t> candidate_dynamic_cloud_index_1;   // 候选动态点  
         SlamLib::PCLPtr<_PointType> unground_points(new pcl::PointCloud<_PointType>());   // 非地面点 
@@ -212,52 +222,12 @@ public:
                 curr_to_ref_keyframe.matrix());
             // 更新range值
             updataRange(curr_unground_points_in_ref_keyframe);
-            // 生成range image
-            // cv::Mat curr_range_img = generateRangeImage(curr_unground_points_in_ref_keyframe); 
-
-            // std::vector<uint32_t> candidate_dynamic_cloud_index_2;   // 进一步的候选点
-
 
             int H = 180 / 10; // 设置图片的高度
-
-            // for (const uint32_t& index : candidate_dynamic_cloud_index_1) {
-            //     const auto& p = curr_unground_points_in_ref_keyframe->points[index];   
-            //     float v_angle = std::asin(p.z / p.range);  
-            //     uint16_t v_index = (H / 2 - 1) - std::floor(v_angle / 0.1745);
-            //     float h_angle = -std::atan2(p.y, p.x);
-            //     if (h_angle < 0) {
-            //         h_angle += 2 * M_PI;
-            //     }
-            //     uint16_t h_index = h_angle / 0.0873;
-
-            //     if (p.range == curr_range_img.at<float>(v_index, h_index)) {
-            //         candidate_dynamic_cloud_index_2.push_back(index);  
-            //     }
-            // }
-
-            // std::cout << "candidate_dynamic_cloud_index size: " << candidate_dynamic_cloud_index_2.size() << std::endl;
-
+            
             cv::Mat ref_keyframe_range_img = generateRangeImage(ref_keyframe_unground_cloud_); 
 
-            // for (const uint32_t& index : candidate_dynamic_cloud_index_2) {
-            //     const auto& p = curr_unground_points_in_ref_keyframe->points[index];   
-            //     float v_angle = std::asin(p.z / p.range);  
-            //     uint16_t v_index = (H / 2 - 1) - std::floor(v_angle / 0.1745);
-            //     float h_angle = -std::atan2(p.y, p.x);
-            //     if (h_angle < 0) {
-            //         h_angle += 2 * M_PI;
-            //     }
-            //     uint16_t h_index = h_angle / 0.0873;
-
-            //     if (std::fabs(p.range - ref_keyframe_range_img.at<float>(v_index, h_index)) > 1) {
-            //         if (ref_keyframe_range_img.at<float>(v_index, h_index) < 200.0f) {
-            //             // std::cout << "cell is 200 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
-            //             dynamic_cloud_->push_back(unground_points->points[index]);  
-            //         }
-            //     }
-            // }
-
-                for (const uint32_t& index : candidate_dynamic_cloud_index_1) {
+            for (const uint32_t& index : candidate_dynamic_cloud_index_1) {
                 const auto& p = curr_unground_points_in_ref_keyframe->points[index];   
                 float v_angle = std::asin(p.z / p.range);  
                 uint16_t v_index = (H / 2 - 1) - std::floor(v_angle / 0.1745);
@@ -265,23 +235,64 @@ public:
                 if (h_angle < 0) {
                     h_angle += 2 * M_PI;
                 }
-                uint16_t h_index = h_angle / 0.0524;
+                uint16_t h_index = h_angle / 0.0175;
+                const auto& trans = curr_to_ref_keyframe.translation();
 
                 if (ref_keyframe_range_img.at<float>(v_index, h_index) < 200.0f) {
-                    if (p.range < ref_keyframe_range_img.at<float>(v_index, h_index) - 1) {   
+                    if (p.range < ref_keyframe_range_img.at<float>(v_index, h_index) - 0.5) {   
                         // std::cout << "cell is 200 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
-                        dynamic_cloud_->push_back(unground_points->points[index]);  
+                        // 存在一些特殊情况，如 1、视角接近平行地面点，这些点落在range img的同一个cell中
+                        // 但是range却相差巨大，容易被误检为动态点
+                        // 2、各种物体的边缘，树、草丛，由与激光采样分辨率较低，也许同一个range img cell中 ref帧的观测在背景上，
+                        // 而在curr帧中就采样到了物体上了，这样就产生了range较大的差异，从而被误检为动态点 
+                        // 为了避免上述误检，采用一个trick,同时检查该激光点落在的range img cell 附近上下左右的四个cell
+                        // 如果附近这几个cell的range值都大于该激光点的值，那么才认为是的动态
+                        uint16_t h_index_plus = h_index == (ref_keyframe_range_img.cols - 1) ? 0 : h_index + 1;
+                        uint16_t h_index_minus = h_index == 0? ref_keyframe_range_img.cols - 1 : h_index - 1;
+                        uint16_t v_index_plus = v_index == (ref_keyframe_range_img.rows - 1) ? v_index : v_index + 1;
+                        uint16_t v_index_minus = v_index == 0? 0 : v_index - 1;
+
+                        // if (ref_keyframe_range_img.at<float>(v_index, h_index_plus) < 200.0f &&
+                        //         ref_keyframe_range_img.at<float>(v_index, h_index_minus) < 200.0f &&
+                        //         ref_keyframe_range_img.at<float>(v_index_plus, h_index) < 200.0f &&
+                        //         ref_keyframe_range_img.at<float>(v_index_minus, h_index) < 200.0f) {
+
+                        if (p.range < ref_keyframe_range_img.at<float>(v_index, h_index_plus) - 0.5 &&
+                                p.range < ref_keyframe_range_img.at<float>(v_index, h_index_minus) - 0.5 &&
+                                p.range < ref_keyframe_range_img.at<float>(v_index_plus, h_index) - 0.5 &&
+                                p.range < ref_keyframe_range_img.at<float>(v_index_minus, h_index) - 0.5) {
+                            // dynamic_cloud_->push_back(unground_points->points[index]);  
+                        } else {
+                            // std::cout << "边缘上的误检动态点1" << std::endl;
+                            // false_dynamic_cloud_->push_back(unground_points->points[index]);  
+                        }
+                        // } else {
+                        //     std::cout << "边缘上的误检动态点2" << std::endl;
+                        // }
+                        
                         //std::cout << "p.range: " << p.range << ", ref_keyframe_range_img : " << ref_keyframe_range_img.at<float>(v_index, h_index) << std::endl;
-                    } else if (p.range > ref_keyframe_range_img.at<float>(v_index, h_index) + 0.5 &&
+                    } else if (p.range > ref_keyframe_range_img.at<float>(v_index, h_index) + 0.3 &&
                                         p.range < ref_keyframe_range_img.at<float>(v_index, h_index) + 20) {
                         // 根据参考帧激光雷达坐标正向和动态点出现的方向进行判断，
                         // 如果参考帧原点到动态点的向量与x轴正向的夹角小与5度，
                         // 且运动方向向量与参考帧坐标系X轴方向接近，则认为是动态
-                        if (std::fabs(p.x) * 0.087 > std::fabs(p.y)) {
-                            const auto& t = curr_to_ref_keyframe.translation();
-                            // 运动方向向量与x轴的夹角小与3度  
-                            if (std::fabs(t.x()) * 0.0524 >= std::fabs(t.y())) {
+                        // 运动方向向量与x轴的夹角小与3度  
+                        if (std::fabs(trans.x()) * 0.0524 >= std::fabs(trans.y()) &&
+                                std::fabs(p.x) * 0.087 > std::fabs(p.y)) {
+                            
+                            uint16_t h_index_plus = h_index == (ref_keyframe_range_img.cols - 1) ? 0 : h_index + 1;
+                            uint16_t h_index_minus = h_index == 0? ref_keyframe_range_img.cols - 1 : h_index - 1;
+                            uint16_t v_index_plus = v_index == (ref_keyframe_range_img.rows - 1) ? v_index : v_index + 1;
+                            uint16_t v_index_minus = v_index == 0? 0 : v_index - 1;
+
+                            if (p.range > ref_keyframe_range_img.at<float>(v_index, h_index_plus) + 0.3 &&
+                                    p.range > ref_keyframe_range_img.at<float>(v_index, h_index_minus) + 0.3 &&
+                                    p.range > ref_keyframe_range_img.at<float>(v_index_plus, h_index) + 0.3 &&
+                                    p.range > ref_keyframe_range_img.at<float>(v_index_minus, h_index) + 0.3) {
                                 dynamic_cloud_->push_back(unground_points->points[index]);  
+                            } else {
+                                // std::cout << "边缘上的误检动态点1" << std::endl;
+                                false_dynamic_cloud_->push_back(unground_points->points[index]);  
                             }
                         }
                     }
@@ -290,8 +301,6 @@ public:
 
             std::cout << "dynamic_cloud_ size: " << dynamic_cloud_->size() << std::endl;
         }
-
-
 
 
 
@@ -317,6 +326,11 @@ public:
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////
     const SlamLib::PCLPtr<_PointType>& GetDynamicCloud() const {
         return dynamic_cloud_; 
+    }
+
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    const SlamLib::PCLPtr<_PointType>& GetFalseDynamicCloud() const {
+        return false_dynamic_cloud_; 
     }
     
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -352,7 +366,7 @@ protected:
         // 图片垂直范围：+-90度   分辨率 2度
         // 图片水平范围：0-360度，分辨率   1度  
         int H = 180 / 10; // 设置图片的高度    +-90 视野
-        int W = 360 / 3; // 设置图片的宽度
+        int W = 360 / 1; // 设置图片的宽度
         cv::Mat range_img(H, W, CV_32F, cv::Scalar(200.0f));
         for (const auto& p : *points) {
             float v_angle = std::asin(p.z / p.range);  
@@ -361,7 +375,7 @@ protected:
             if (h_angle < 0) {
                 h_angle += 2 * M_PI;
             }
-            uint16_t h_index = h_angle / 0.0524;
+            uint16_t h_index = h_angle / 0.0175;
             if (p.range < range_img.at<float>(v_index, h_index)) {
                 range_img.at<float>(v_index, h_index) = p.range;  
             }
@@ -374,6 +388,29 @@ protected:
         cv::imshow("range_img", gray_img);
         cv::waitKey(10);  
         return range_img; 
+    }
+
+    /**
+     * @brief 获取投影在距离图像上的水平坐标
+     * 
+     * @return uint16_t 
+     */
+    uint16_t getRangeImageHorizonIndex(const _PointType& p) {
+        float h_angle = -std::atan2(p.y, p.x);
+        if (h_angle < 0) {
+            h_angle += 2 * M_PI;
+        }
+        return h_angle / rangeImg_opt_.h_angle_res_rad_;
+    }
+
+    /**
+     * @brief 获取投影在距离图像上的垂直坐标
+     * 
+     * @return uint16_t 
+     */
+    uint16_t getRangeImageVerticalIndex(const _PointType& p) {
+        float v_angle = std::asin(p.z / p.range);  
+        return (rangeImg_opt_.h_size / 2 - 1) - std::floor(v_angle / rangeImg_opt_.v_angle_res_rad_);
     }
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -446,6 +483,7 @@ protected:
 
 private:
     Option option_; 
+    rangeImageOption rangeImg_opt_;  
     bool init_;   
     bool local_map_full_ = false;  
     // 匹配算法 
@@ -453,6 +491,7 @@ private:
     typename SlamLib::pointcloud::RegistrationBase<_PointType>::Ptr registration_ptr_;
     LocalMapPtr local_map_;  
     SlamLib::PCLPtr<_PointType> dynamic_cloud_;
+    SlamLib::PCLPtr<_PointType> false_dynamic_cloud_;
     SlamLib::PCLPtr<_PointType> last_keyframe_unground_cloud_ = nullptr;
     SlamLib::PCLPtr<_PointType> ref_keyframe_unground_cloud_ = nullptr;     // 上一个的上一个关键帧的非地面点 
     Eigen::Isometry3d prev_pose_;  // 上一帧的位姿

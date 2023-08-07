@@ -64,6 +64,8 @@ public:
             "preprocessed_pointcloud", 1, this);
         dynamic_pointcloud_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>(
             "dynamic_pointcloud", 1, this);
+        false_dynamic_pointcloud_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>(
+            "/false_dynamic_pointcloud", 1);
         stable_pointcloud_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>(
             "stable_pointcloud", 1, this);
         ground_pointcloud_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>(
@@ -72,8 +74,6 @@ public:
             "/nonground_cloud", 1);
         outlier_pointcloud_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>(
             "/outlier_cloud", 1);
-        edge_feature_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>(
-            "/edge_feature", 1);
         surf_feature_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>(
             "/surf_feature", 1);
         local_map_filtered_publisher_ = node_handle_.advertise<sensor_msgs::PointCloud2>(
@@ -190,6 +190,14 @@ public:
             laserCloudTemp.header.frame_id = "base";
             dynamic_pointcloud_publisher_.publish(laserCloudTemp);
         }
+
+        if (false_dynamic_pointcloud_publisher_.getNumSubscribers() != 0) {
+            pcl::toROSMsg(*data.pointcloud_.at("false_dynamic_points"), laserCloudTemp);
+            laserCloudTemp.header.stamp = stamp;
+            laserCloudTemp.header.frame_id = "base";
+            false_dynamic_pointcloud_publisher_.publish(laserCloudTemp);
+        }
+
 
         if (data.pointcloud_.find("filtered_localmap") != data.pointcloud_.end()) {
             publishCloud<UsedPointT>( &local_map_filtered_publisher_,    // 发布该点云的话题 
@@ -528,7 +536,7 @@ private:
     ros::Publisher ground_pointcloud_publisher_;
     ros::Publisher nonground_pointcloud_publisher_;
     ros::Publisher outlier_pointcloud_publisher_;
-    ros::Publisher edge_feature_publisher_;
+    ros::Publisher false_dynamic_pointcloud_publisher_;
     ros::Publisher surf_feature_publisher_;
     ros::Publisher local_map_filtered_publisher_;
     ros::Publisher markers_publisher_; // 可视化

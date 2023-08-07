@@ -22,6 +22,7 @@ public:
                                             Eigen::Isometry3d &deltaT) = 0;
     virtual const Eigen::Isometry3d& GetCurrPoseInLocalFrame() const = 0;
     virtual const SlamLib::PCLPtr<_PointType>& GetDynamicCloud() const = 0;  
+    virtual const SlamLib::PCLPtr<_PointType>& GetFalseDynamicCloud() const = 0;  
     virtual const LocalMapContainer& GetLocalMap() const = 0;  
     virtual bool HasUpdataLocalMap() const = 0;
 };
