@@ -6,16 +6,16 @@
     <node name="rviz" pkg="rviz" type="rviz" args="-d $(find lwio)/rviz/lwio.rviz" />
 
     <!-- Parameters -->
-    <param name="ParamPath" value="$(find lwio)/config/velodyne_icp_timedIvox.yaml" />
+    <param name="ParamPath" value="$(find lwio)/config/livox_icp_timedIvox.yaml" />
     <!--  /livox/lidar "/rslidar_points" /points_raw   /left/velodyne_points /velodyne_points   /kitti/velo/pointcloud-->
-    <param name="LidarTopic" value="/rslidar_points" />
+    <param name="LidarTopic" value="/livox/lidar" />
     <!-- /imu/data     imu_raw-->
     <param name="ImuTopic" value="/imu/data" />
     <param name="GnssTopic" value="/fix" />  
     <param name="OdomTopic" value="/odom_scout" />
-    <param name="LidarType" value="1" />   <!--0: livox, 1:velodyne--> 
+    <param name="LidarType" value="0" />   <!--0: livox, 1:velodyne--> 
     <param name="MaxRangeThresh" value="100" />
-    <param name="MinRangeThresh" value="2" />
+    <param name="MinRangeThresh" value="1" />
 
     <node name="advanced_lio_node" pkg="lwio" type="advanced_lio_node" output="screen">
     </node>

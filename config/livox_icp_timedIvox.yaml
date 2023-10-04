@@ -44,7 +44,7 @@ tracker:
       edge_label:
       plane_label:
   keyframe_update:
-    translation: 0.3
+    translation: 0.5
     rotation: 0.1
     time: 10
   localmap:

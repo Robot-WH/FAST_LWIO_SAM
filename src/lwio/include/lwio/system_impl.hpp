@@ -77,7 +77,7 @@ void System<_PointT>::InputData(sensor::GnssData& data) {
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /**
- * @brief: 对于GNSS数据的处理 
+ * @brief: 对于轮速数据的处理 
  */            
 template<typename _PointT>    
 void System<_PointT>::InputData(sensor::WheelOdom& data) {
@@ -170,9 +170,6 @@ void System<_PointT>::processMeasurements() {
                     const auto& local_map = lidar_trackers_->GetLocalMap();  
                     result.pointcloud_.insert(local_map.begin(), local_map.end());
                 }
-                // for (const auto& it : result.pointcloud_) {
-                //     std::cout << "name: " << it.first << std::endl;
-                // }
                 comm::IntraProcess::Server::Instance().Publish("odom_res", result); 
 
                 lidar_sm_.lock();
