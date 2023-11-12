@@ -1,22 +1,4 @@
 lidar_type: 1    # 1:传统机械雷达   2：非传统雷达 
-imu_use_type: 0   # imu的使用方式    
-                                      # 0、仅仅使用gyro,不使用加速度信息
-                                      # 1、使用加速度和角速度信息   
-plane_motion: true     # 是否是平面运动  
-
-sensor_param:
-
-extrinsic:
-  calib_init: on   # 标定初始化 
-  lidar_to_imu:
-    trans: [0.0, 0.0, 0.0]
-    # rot: [-1, 0, 0,
-    #               0, 1, 0,
-    #               0, 0, -1]
-    rot: [1, 0, 0,
-                  0, 1, 0,
-                  0, 0, 1]
-
 # 算法的配置文件 
 preprocess:
   downsampling_enable: true   # 是否使用降采样
@@ -25,7 +7,7 @@ preprocess:
   downsampling:
     mode: VoxelGrid    # VoxelGrid ， ApproximateVoxelGrid 
     VoxelGrid:
-      resolution: 0.3
+      resolution: 0.5
     ApproximateVoxelGrid:
   outlierRemoval: 
     mode: radiusOutlier # radiusOutlier, statisticalOutlier
@@ -62,8 +44,8 @@ tracker:
       edge_label:
       plane_label:
   keyframe_update:
-    translation: 1
-    rotation: 0.2
+    translation: 2
+    rotation: 0.5
     time: 10
   localmap:
     method: timedIvox  # time_sliding, area_sliding, ivox, ikdtree, timedIvox
@@ -72,7 +54,7 @@ tracker:
       kdtree_enable: true   # 是否启用kdtree搜索
     area_sliding:
     timedIvox:
-      window_size: 20
+      window_size: 10
       resolution: 0.5
       nearby_type: 18   # 1, 6, 18, 26 
       capacity: 30000    # voxel的容量 
@@ -92,6 +74,7 @@ mapping:
   extrinsic_R: [ 1, 0, 0,
                  0, 1, 0,
                  0, 0, 1 ]
+
 
 
 feature_extract_enable: false

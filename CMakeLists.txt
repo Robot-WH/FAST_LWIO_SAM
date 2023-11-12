@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED OFF)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_BUILD_TYPE "Release")
 # set(CMAKE_BUILD_TYPE Debug)
-# add_definitions("-Wall -g") 
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall")
 
 find_package(catkin REQUIRED COMPONENTS
   tf
@@ -46,10 +46,6 @@ add_message_files(
   cloud_info.msg
 )
 
-add_service_files(FILES
-  SaveMap.srv
-  SaveData.srv
-)
 
 generate_messages(
   DEPENDENCIES
@@ -93,7 +89,8 @@ include_directories(
   ${DataComm_INCLUDE_DIR}
 )
 
-add_subdirectory(src)
+add_subdirectory(lwio)
+add_subdirectory(apps)
 
 
 

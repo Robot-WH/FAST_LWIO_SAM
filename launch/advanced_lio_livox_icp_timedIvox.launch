@@ -3,7 +3,7 @@
     <param name="use_sim_time" value="true"/>
 
     <!--启动配置好的rviz-->
-    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find lwio)/rviz/lwio.rviz" />
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find lwio)/rviz/lwio_with_dynamic_removal.rviz" />
 
     <!-- Parameters -->
     <param name="ParamPath" value="$(find lwio)/config/livox_icp_timedIvox.yaml" />
