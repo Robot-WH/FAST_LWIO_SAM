@@ -18,6 +18,7 @@
 #include "comm/InnerProcessComm.hpp"
 #include "Sensor/lidar_data.h"
 #include "LidarProcess/Preprocess/LidarPreProcess.hpp"
+#include "Estimator/SWO/GyroBiasEstimator.hpp"
 
 namespace lwio {
 
@@ -91,6 +92,7 @@ private:
     std::unique_ptr<LidarPreProcess<_PointT>> preprocess_;    
     LidarTrackerPtr lidar_trackers_;  
     ImuInitialize imu_init_;  
+    estimator::GyroBiasSWOEstimate gyro_bias_Estimate_;  
     // std::unique_ptr<PointCloudSegmentation<_PointT>> segmentation_;  
     typename DirectGroundDetect<_PointT>::Ptr ground_detect_;    // 地面检测
     // std::unique_ptr<LIGEstimatorInterface<_PointT>> estimator_;    // 估计器  

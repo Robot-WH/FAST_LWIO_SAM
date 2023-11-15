@@ -5,13 +5,13 @@
 #include "SlamLib/tic_toc.hpp"
 #include "SlamLib/Common/point_type.h"
 #include "lwio/system.h"
-#include "Estimator/SlidingWindowOptimizeEstimator.hpp"
+#include "Estimator/SWO/SlidingWindowOptimizeEstimator.hpp"
 
 namespace lwio {
-
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 template<typename _PointT>
 System<_PointT>::System(std::string param_path) : param_path_(param_path) {
+    std::cout << "构造System..." << std::endl;
     YAML::Node yaml = YAML::LoadFile(param_path);
     // 读取外参  
     std::vector<float> data =    yaml["extrinsic"]["lidar_to_imu"]["rot"].as<std::vector<float>>(); 
@@ -322,7 +322,9 @@ void System<_PointT>::processMeasurements() {
                     estimateBodyLinearVelocity(lidar_motion, curr_lidar_data.timestamp_end_ - curr_lidar_data.timestamp_start_);
                 }
                 // 融合状态估计器 - 可选择 ESKF、非线性优化  
-
+                if (gyro_bias_Estimate_.Estimate(imu_selected, lidar_motion)) {
+                    sensor_param_.imu_.gyro_bias_ = gyro_bias_Estimate_.GetBgs();  
+                }
                 // 如果没有初始化，那么要进行初始化操作
                 // 初始化： 1、初始化IMU内参  2、初始化 IMU/IMU&Odom-Lidar的外参   3、初始化估计器    
                 if (!SYSTEM_INIT_) {
@@ -332,37 +334,48 @@ void System<_PointT>::processMeasurements() {
                             sensor_param_.imu_.acc_bias_, state_.R_gb_)) {
                         IMU_INIT_ = true;  
                     }
-                    // 外参标定
-                    // 平面运动
-                    if (PLANE_MOTION_) {
-                        if (imu_use_type_ == ImuUseType::only_gyro && mode_ == Mode::lwio) {
-                            if (extrinsics_init_.AddPose(DR_motion, lidar_motion)) {
-                                if (extrinsics_init_.CalibExRotationPlanar()) {
+                    // 如果IMU标定完成，那么可以进行外参标定
+                    if (IMU_INIT_) {
+                        // 如果不使用设定的外参，那么要进行外参标定
+                        if (!EXTRINSIC_SET_) {
+                            // 平面运动
+                            if (PLANE_MOTION_) {
+                                if (imu_use_type_ == ImuUseType::only_gyro && mode_ == Mode::lwio) {
+                                    if (extrinsics_init_.AddPose(DR_motion, lidar_motion)) {
+                                        // 先标定旋转 然后标定平移 
+                                        if (extrinsics_init_.CalibExRotationPlanar()) {
+                                            if (extrinsics_init_.CalibExTranslationPlanar()) {
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    std::cout << SlamLib::color::RED << 
+                                        "当前处与平面运动，但是数据丰富度不足，无法完成外参标定!"
+                                        << SlamLib::color::RESET << std::endl; 
+                                }
+                            } else {
+                                if (imu_use_type_ == ImuUseType::only_gyro && mode_ == Mode::lio) {
+                                    if (extrinsics_init_.AddPose(DR_motion, lidar_motion, false)) {
+                                        if (extrinsics_init_.CalibExRotation()) {
+                                            EXTRINSIC_SET_ = true;
+                                            SYSTEM_INIT_ = true;
+                                            imu_t_lidar_.setZero();
+                                            imu_R_lidar_ = extrinsics_init_.GetCalibRot().toRotationMatrix(); 
+                                            lidar_trackers_->ResetLocalmap();  
+                                            std::cout << SlamLib::color::GREEN << "calibration done ! imu_R_lidar_: " << std::endl
+                                                << imu_R_lidar_.matrix() << std::endl << "imu_t_lidar_: " << imu_t_lidar_.transpose() 
+                                                << SlamLib::color::RESET << std::endl; 
+                                        }  
+                                    }
                                 }
                             }
                         } else {
-                            std::cout << SlamLib::color::RED << 
-                                "当前处与平面运动，但是数据丰富度不足，无法完成外参标定!"
-                                << SlamLib::color::RESET << std::endl; 
-                        }
-                    } else {
-                        if (imu_use_type_ == ImuUseType::only_gyro && mode_ == Mode::lio) {
-                            if (extrinsics_init_.AddPose(DR_motion, lidar_motion, false)) {
-                                if (extrinsics_init_.CalibExRotation()) {
-                                    EXTRINSIC_SET_ = true;
-                                    SYSTEM_INIT_ = true;
-                                    imu_t_lidar_.setZero();
-                                    imu_R_lidar_ = extrinsics_init_.GetCalibRot().toRotationMatrix(); 
-                                    lidar_trackers_->ResetLocalmap();  
-                                    std::cout << SlamLib::color::GREEN << "calibration done ! imu_R_lidar_: " << std::endl
-                                        << imu_R_lidar_.matrix() << std::endl << "imu_t_lidar_: " << imu_t_lidar_.transpose() 
-                                        << SlamLib::color::RESET << std::endl; 
-                                }  
-                            }
+                            SYSTEM_INIT_ = true;  
+                            Eigen::Quaterniond imu_q_lidar(imu_R_lidar_); 
+                            gyro_bias_Estimate_.Initialize(imu_q_lidar, sensor_param_.imu_.gyro_bias_);
+                            std::cout << SlamLib::color::GREEN << "估计器初始化成功 ！" << SlamLib::color::RESET << std::endl;
                         }
                     }
-
-                    // SYSTEM_INIT_ = true;  
                 }
                 
                 ResultInfo<_PointT> result;
@@ -524,7 +537,6 @@ bool System<_PointT>::extractSensorData (
     } else {
         // std::cout << "data_cache.empty()" << std::endl;
     }
-
     return true;  
 }
 }// namespace 

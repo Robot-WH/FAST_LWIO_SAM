@@ -7,7 +7,7 @@ plane_motion: true     # 是否是平面运动
 sensor_param:
 
 extrinsic:
-  calib_init: on   # 标定初始化 
+  calib_init: off   # 标定初始化 
   lidar_to_imu:
     trans: [0.0, 0.0, 0.0]
     # rot: [-1, 0, 0,

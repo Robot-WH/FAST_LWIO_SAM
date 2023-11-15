@@ -1,10 +1,10 @@
 
 #pragma once 
 #include <ceres/ceres.h>
-#include "ceres/pose_local_parameterization.hpp"
-#include "preintegration/imu_preintegration_base.hpp"
-#include "ceres/imu_preIntegration_factor.hpp"
-#include "ceres/odom_factor.hpp"
+#include "../ceres/pose_local_parameterization.hpp"
+#include "../preintegration/imu_preintegration_base.hpp"
+#include "../ceres/imu_preIntegration_factor.hpp"
+#include "../ceres/odom_factor.hpp"
 
 namespace lwio {
 namespace estimator {

@@ -176,9 +176,13 @@ static bool solveQuadraticEquation(const T& a, const T& b, const T& c, T& x1, T&
 
     if (delta2 < 0.0) {
         // std::cout << "delta2: " << delta2 << std::endl;
-        // if (delta2 < -0.001) {
+        if (delta2 < -0.001) {
             return false;
-        // }
+        } else {
+            x1 = (-b) / (2.0 * a);
+            x2 = (-b) / (2.0 * a);
+            return true;  
+        }
     }
     T delta = sqrt(delta2);
     x1 = (-b + delta) / (2.0 * a);

@@ -81,6 +81,10 @@ public:
             "/filtered_local_map", 1);
         markers_publisher_ = node_handle_.advertise<visualization_msgs::MarkerArray>(
             "/cluster_markers", 10);        // 可视化
+        odom_pub_ = node_handle_.advertise<nav_msgs::Odometry>(
+            "/fusion_odom", 10);
+        predict_odom_pub_ = node_handle_.advertise<nav_msgs::Odometry>(
+            "/predict_odom", 10);
         // AccSigmaLimit_ = 0.002;
         system_ptr_.reset(new lwio::System<UsedPointT>(option_.param_path_));
         pose_ = Eigen::Isometry3d::Identity(); 
@@ -112,6 +116,12 @@ public:
         imu_data.rot_.x() = imu_msg->orientation.x;
         imu_data.rot_.y() = imu_msg->orientation.y;
         imu_data.rot_.z() = imu_msg->orientation.z;
+        static uint32_t t = 0;
+        t++;
+        int k = t / 1000;
+        Eigen::Vector3d w_bias = k * Eigen::Vector3d(0.0001, 0.0001, -0.0001);
+        imu_data.gyro_ -= w_bias;
+        std::cout << "w_bias: " << w_bias.transpose() << std::endl;
         system_ptr_->InputData(imu_data);
     }
 
@@ -360,11 +370,40 @@ public:
         quat.normalize();
         ros::Time stamp = ros::Time(data.time_stamps_);  
         PublishTF(p, quat, stamp, "odom", "base"); 
+
+        nav_msgs::Odometry odom;                            
+        odom.header.stamp = stamp;
+        odom.header.frame_id = "odom";       // odom坐标    /odom
+        odom.child_frame_id = "base";        // /lidar_odom
+        odom.pose.pose.position.x = p[0];
+        odom.pose.pose.position.y = p[1];
+        odom.pose.pose.position.z = p[2];
+        // 构造四元数   ROS信息
+        geometry_msgs::Quaternion odom_quat;
+        odom_quat.w = quat.w();
+        odom_quat.x = quat.x();
+        odom_quat.y = quat.y();
+        odom_quat.z = quat.z();
+        odom.pose.pose.orientation = odom_quat;  
+        odom_pub_.publish(odom);
+
         //  发布预测位姿   用于调试
         p = data.predict_pose_.translation().cast<float>();
         quat = Eigen::Quaternionf(data.predict_pose_.rotation().cast<float>());
         quat.normalize();
         PublishTF(p, quat, stamp, "odom", "predict_base");
+
+        odom.child_frame_id = "predict_base";        // /lidar_odom
+        odom.pose.pose.position.x = p[0];
+        odom.pose.pose.position.y = p[1];
+        odom.pose.pose.position.z = p[2];
+        // 构造四元数   ROS信息
+        odom_quat.w = quat.w();
+        odom_quat.x = quat.x();
+        odom_quat.y = quat.y();
+        odom_quat.z = quat.z();
+        odom.pose.pose.orientation = odom_quat;  
+        predict_odom_pub_.publish(odom);
 
         // 发布点云
         sensor_msgs::PointCloud2 laserCloudTemp;
@@ -559,6 +598,8 @@ private:
     ros::Publisher surf_feature_publisher_;
     ros::Publisher local_map_filtered_publisher_;
     ros::Publisher markers_publisher_; // 可视化
+    ros::Publisher odom_pub_; 
+    ros::Publisher predict_odom_pub_;
 
     std_msgs::Header cloud_header_;
 
