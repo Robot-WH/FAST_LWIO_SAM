@@ -99,7 +99,7 @@ private:
     Eigen::Isometry3d pose_;    // 运动
     Eigen::Vector3d curr_velocity_{0.0, 0.0, 0.0};
     Eigen::Vector3d last_velocity_{0.0, 0.0, 0.0}; 
-    Eigen::Vector3d filtered_velocity_{0.0, 0.0, 0.0}; 
+    Eigen::Vector3d filtered_body_velocity_{0.0, 0.0, 0.0}; 
     HandEyeCalibrationBase extrinsics_init_;    // 外参初始化
     KeyframeUpdater keyframe_updater_; 
 

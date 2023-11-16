@@ -128,10 +128,20 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // odom的回调函数
     void OdomCallback(const nav_msgs::Odometry::ConstPtr &odometryMsg) {
+        static int t = 0;
+        ++t;
+        std::cout << "t: " << t << std::endl;
+        
         lwio::sensor::OdomData odom;
         odom.timestamp_ = odometryMsg->header.stamp.toSec();
         odom.velocity_ = odometryMsg->twist.twist.linear.x;   // 线速度即为 x轴的速度  
         odom.yaw_angular_vel_ = odometryMsg->twist.twist.angular.z; // yaw的角速度
+        // 给odom增加一个扰动 模拟打滑
+        if (t > 1270 && t < 1300) {
+            std::cout << "原速度： " << odom.velocity_ << std::endl;
+            odom.velocity_ += 10;
+            std::cout << "打滑速度： " << odom.velocity_ << std::endl;
+        }
         // odom位姿     odom为2D，没有z的观测
         // odom.pos_xy_.x() = odometryMsg->pose.pose.position.x;
         // odom.pos_xy_.y() = odometryMsg->pose.pose.position.y;

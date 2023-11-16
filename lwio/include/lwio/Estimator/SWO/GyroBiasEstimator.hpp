@@ -133,7 +133,7 @@ private:
     }
 
     struct Param {
-        static const int WINDOW_SIZE_ = 3;
+        static const int WINDOW_SIZE_ = 5;
     };
     bool init_; 
     int frame_count_;     // 当前滑动窗口中，帧的数量  

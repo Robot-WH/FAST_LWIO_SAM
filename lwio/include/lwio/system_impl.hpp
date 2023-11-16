@@ -149,13 +149,11 @@ Eigen::Isometry3d System<_PointT>::deadReckoning(std::deque<sensor::OdomData> co
     int curr_odom_point = 0;
 
     for (int i = 1; i < imu_container.size(); ++i) {
-        
         if (back_odom.timestamp_ < imu_container[i].timestamp_) {
             // 更新线速度信息
             linear_velocity.x() = back_odom.velocity_;
             back_odom = wheelOdom_container[++curr_odom_point];
         }
-
         /////////////////////////差分运动学解算  
         delta_time = imu_container[i].timestamp_ - last_time;  
         last_time = imu_container[i].timestamp_;
@@ -207,12 +205,7 @@ Eigen::Isometry3d System<_PointT>::deadReckoning(Eigen::Vector3d const& velocity
         last_trans += delta_time * velocity; 
     }
     Eigen::Isometry3d T = Eigen::Isometry3d::Identity(); 
-    // T.linear() = sensor_param_.imu_.lidar_R_imu_ * R_o_i * sensor_param_.imu_.lidar_R_imu_.inverse();
     T.linear() = R_o_i;
-    // Eigen::Quaterniond rot_0 = imu_container.front().rot_;  
-    // Eigen::Quaterniond rot_1 = imu_container.back().rot_;  
-    // T.linear() = sensor_param_.imu_.lidar_R_imu_.inverse() * (rot_1.inverse() * rot_0).toRotationMatrix()
-    //                         * sensor_param_.imu_.lidar_R_imu_; 
     T.translation() = last_trans;
     return T;  
 }
@@ -259,8 +252,9 @@ void System<_PointT>::processMeasurements() {
                 
                 // 如果系统初始化了，那么进行dead - reckoning 以及激光去畸变
                 // dead - reckoning 
+                // 有IMU 
                 if (!imu_selected.empty()) {
-                    // 有IMU 
+                    // IMU初始化了才继续工作
                     if (IMU_INIT_) {
                         if (!wheel_odom_selected.empty()) {
                             // 轮速-IMU 组合
@@ -272,13 +266,22 @@ void System<_PointT>::processMeasurements() {
                             //  << ", lidar start time: " << curr_lidar_data.timestamp_start_ << ", odom end time: "
                             //  << wheel_odom_selected.back().timestamp_ << ", lidar end time:"
                             //  << curr_lidar_data.timestamp_end_ << std::endl;
-                            DR_motion = deadReckoning(wheel_odom_selected, imu_selected);
+                            // 通过匀速运动学模型估计的速度 和 轮速计速度进行比较，判断轮速是否打滑
+                            float models_rate = filtered_body_velocity_.norm(); 
+                            if (std::fabs(wheel_odom_selected[0].velocity_) - models_rate > 2) {
+                                // 打滑
+                                DR_motion = deadReckoning(filtered_body_velocity_, imu_selected);
+                                std::cout << SlamLib::color::RED << "WARN: -----------------轮速计打滑 -------------------" 
+                                    << SlamLib::color::RESET << std::endl;
+                            } else {
+                                DR_motion = deadReckoning(wheel_odom_selected, imu_selected);
+                            }
                             mode_ = Mode::lwio;  
                         } else {
                             // 纯IMU
                             std::cout << SlamLib::color::GREEN << "--------------------- imu deadReckoning !-----------------------" 
                                 << SlamLib::color::RESET << std::endl; 
-                            DR_motion = deadReckoning(filtered_velocity_, imu_selected);
+                            DR_motion = deadReckoning(filtered_body_velocity_, imu_selected);
                             mode_ = Mode::lio;  
                         }
                     } else {
@@ -424,8 +427,8 @@ void System<_PointT>::estimateBodyLinearVelocity(
         imu_t_lidar_ - body_rot * imu_t_lidar_;
     last_velocity_ = curr_velocity_;  
     curr_velocity_ = body_trans / incre_time;  
-    filtered_velocity_ = (last_velocity_ + curr_velocity_) / 2;
-    // std::cout << "filtered_velocity_ : " << filtered_velocity_.transpose() << std::endl;
+    filtered_body_velocity_ = (last_velocity_ + curr_velocity_) / 2;
+    // std::cout << "filtered_body_velocity_ : " << filtered_body_velocity_.transpose() << std::endl;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
