@@ -52,23 +52,27 @@ public:
             std::cout << "估计器没有初始化!!" << std::endl;
             return false;  
         }
-        std::cout << "frame_count_: " << frame_count_ << std::endl;
         // IMU陀螺仪角度预积分
         gyroPreIntegrations(imu_data);
-        std::cout << "预积分完成" << std::endl;
         // 构造最小二乘优化
         // 通过外参 将外部传感器观测的旋转转换到imu系下
         Eigen::Quaterniond q_sensor(motion.linear());   
         Eigen::Quaterniond q_imu_obs(imu_q_s_ * q_sensor * imu_q_s_.inverse());
+        q_imu_obs_queue_[frame_count_] = q_imu_obs;  
 
-        J_.block<3, 3>(frame_count_ * 3, 0) = 
-            gyro_pre_integrations_[frame_count_]->jacobian_.template block<3, 3>(0, 3);
-        e_.block<3, 1>(frame_count_ * 3, 0) = 
-            // Eigen::Vector3d::Zero();  
-            (gyro_pre_integrations_[frame_count_]->delta_q_.inverse() * q_imu_obs).vec();
-        std::cout << "预积分旋转 delta_q_ w: " << gyro_pre_integrations_[frame_count_]->delta_q_.w() 
-            << ",vec: " << gyro_pre_integrations_[frame_count_]->delta_q_.vec().transpose() << std::endl;
-        std::cout << "误差: " << (gyro_pre_integrations_[frame_count_]->delta_q_.inverse() * q_imu_obs).vec().transpose() << std::endl; 
+        for (int i = 0; i < Param::WINDOW_SIZE_; i++) {
+            if (gyro_pre_integrations_[i] != nullptr) {
+                J_.block<3, 3>(i * 3, 0) = 
+                    gyro_pre_integrations_[i]->jacobian_.template block<3, 3>(0, 3);
+                e_.block<3, 1>(i * 3, 0) = 
+                    // Eigen::Vector3d::Zero();  
+                    (gyro_pre_integrations_[i]->delta_q_.inverse() * q_imu_obs_queue_[i]).vec();
+            }
+        }
+
+        // std::cout << "预积分旋转 delta_q_ w: " << gyro_pre_integrations_[frame_count_]->delta_q_.w() 
+        //     << ",vec: " << gyro_pre_integrations_[frame_count_]->delta_q_.vec().transpose() << std::endl;
+        // std::cout << "误差: " << (gyro_pre_integrations_[frame_count_]->delta_q_.inverse() * q_imu_obs).vec().transpose() << std::endl; 
 
         A_ = J_.transpose() * J_;
         b_ = 2 * J_.transpose() * e_;
@@ -92,12 +96,11 @@ public:
         }
         if (gyro_pre_integrations_[frame_count_] != nullptr) {
             gyro_pre_integrations_[frame_count_]->Reset();  
-            // delete gyro_pre_integrations_[frame_count_];  
-            // gyro_pre_integrations_[frame_count_] = nullptr;
         }
         return true;  
     }
 
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     const Eigen::Vector3d& GetBgs() const {
         return bg_;
     }
@@ -129,14 +132,14 @@ private:
         }
     }
 
-    
     struct Param {
-        static const int WINDOW_SIZE_ = 2;
+        static const int WINDOW_SIZE_ = 3;
     };
     bool init_; 
     int frame_count_;     // 当前滑动窗口中，帧的数量  
     // 系统状态 
     GyroPreIntegration *gyro_pre_integrations_[Param::WINDOW_SIZE_];
+    Eigen::Quaterniond q_imu_obs_queue_[Param::WINDOW_SIZE_];
     Eigen::Vector3d bg_;     // 陀螺仪bias
     Eigen::Quaterniond imu_q_s_;     // 外参： sensor -> imu 的旋转 
     // 优化信息矩阵
